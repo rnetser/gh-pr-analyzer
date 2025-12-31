@@ -7,14 +7,22 @@ A CLI tool that analyzes GitHub pull requests and shows why they cannot be merge
 
 ## Features
 
-- **Detects merge blockers**:
-  - ✗ Failing CI checks (with last 5 lines of error output)
-  - ⏳ Pending reviews
-  - ⚠ Requested changes
-  - ⚡ Merge conflicts
+- **Comprehensive PR status overview**:
+  - **CI Status**: Lists individual failing/pending check names with color-coded indicators
+  - **Review Status**: Shows approval state and requested changes
+  - **Comments**: Displays unresolved comment counts with clickable links
+  - **Merge Conflicts**: Detects branch conflicts
 - **Beautiful terminal output** with Rich tables and color-coded status indicators
+- **Organized multi-column layout** for quick scanning
 - **Summary statistics** showing ready-to-merge vs blocked PRs
 - **Fast async** HTTP requests for quick analysis
+
+### Status Indicators
+
+- ✅ **Green** - Good/Passing/Ready
+- ❌ **Red** - Blocking issue
+- ⏳ **Yellow** - Pending/In progress
+- ➖ **Gray** - Not applicable/None
 
 ## Installation
 
@@ -66,26 +74,24 @@ uv run gh-pr-analyzer username
 ## Example Output
 
 ```
-                                    PR Analysis Results
-┏━━━━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Repository        ┃ PR #┃ Title                  ┃ Merge Blockers                ┃
-┡━━━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ user/awesome-app  │ 123 │ Add dark mode toggle   │ ✓ Ready to merge              │
-│ user/backend-api  │ 456 │ Fix authentication bug │ ✗ FAILING_CHECK:              │
-│                   │     │                        │   CI Build (exit 1)           │
-│                   │     │                        │   Last 5 lines:               │
-│                   │     │                        │   Error: tests failed         │
-│                   │     │                        │   FAILED test_auth.py::...    │
-│ user/docs-site    │ 789 │ Update installation    │ ⚠ CHANGES_REQUESTED:          │
-│                   │     │                        │   Reviewers: alice, bob       │
-│ user/frontend     │ 234 │ Refactor components    │ ⏳ PENDING_CHECKS:            │
-│                   │     │                        │   Tests (in_progress)         │
-└───────────────────┴─────┴────────────────────────┴───────────────────────────────┘
+                                          PR Analysis Results
+┏━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ Repository   ┃ PR #┃ Title            ┃ CI Status           ┃ Reviews      ┃ Comments                    ┃ Conflicts  ┃
+┡━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ org/repo     │ #42 │ Add auth feature │ ❌ Failing:         │ ❌ Changes   │ ❌ 2 unresolved:            │ ✅ Clean   │
+│              │     │                  │   • lint            │   requested  │   • github.com/.../r123     │            │
+│              │     │                  │   • test-unit       │              │   • github.com/.../r456     │            │
+├──────────────┼─────┼──────────────────┼─────────────────────┼──────────────┼─────────────────────────────┼────────────┤
+│ org/repo2    │ #15 │ Fix login bug    │ ✅ Passing          │ ✅ Approved  │ ✅ Resolved                 │ ✅ Clean   │
+├──────────────┼─────┼──────────────────┼─────────────────────┼──────────────┼─────────────────────────────┼────────────┤
+│ org/repo3    │ #78 │ Update API docs  │ ⏳ Pending:         │ ⏳ Pending   │ ➖ None                     │ ❌ Conflicts│
+│              │     │                  │   • deploy-preview  │              │                             │            │
+└──────────────┴─────┴──────────────────┴─────────────────────┴──────────────┴─────────────────────────────┴────────────┘
 
 Summary:
-  ✓ Ready to merge: 1
-  ✗ Blocked: 3
-  Total PRs: 4
+  ✅ Ready to merge: 1
+  ❌ Blocked: 2
+  Total PRs: 3
 ```
 
 ## Development
