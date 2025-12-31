@@ -139,17 +139,24 @@ def display_results(analyses: list) -> None:
         else:
             blocked_count += 1
 
-        # Format CI Status
+        # Format CI Status - show both failing and pending when applicable
         if analysis.ci_status == "passing":
             ci_text = Text("✅ Passing", style="bold green")
-        elif analysis.ci_status == "failing":
-            ci_text = Text("❌ Failing:\n", style="bold red")
-            for check_name in analysis.failed_check_names:
-                ci_text.append(f"  • {check_name}\n", style="red")
-        elif analysis.ci_status == "pending":
-            ci_text = Text("⏳ Pending:\n", style="bold yellow")
-            for check_name in analysis.pending_check_names:
-                ci_text.append(f"  • {check_name}\n", style="yellow")
+        elif analysis.failed_check_names or analysis.pending_check_names:
+            # Build combined status showing both failing and pending
+            ci_text = Text()
+
+            # Add failing checks if present
+            if analysis.failed_check_names:
+                ci_text.append("❌ Failing:\n", style="bold red")
+                for check_name in analysis.failed_check_names:
+                    ci_text.append(f"  • {check_name}\n", style="red")
+
+            # Add pending checks if present
+            if analysis.pending_check_names:
+                ci_text.append("⏳ Pending:\n", style="bold yellow")
+                for check_name in analysis.pending_check_names:
+                    ci_text.append(f"  • {check_name}\n", style="yellow")
         else:
             ci_text = Text("⏳ Unknown", style="dim")
 
