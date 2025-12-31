@@ -107,6 +107,19 @@ class GitHubClient:
         """
         return await self._request("GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews")  # type: ignore[return-value]
 
+    async def get_pr_review_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
+        """Get all review threads/comments to check for unresolved ones.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            pr_number: PR number
+
+        Returns:
+            List of review comment dictionaries
+        """
+        return await self._request("GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/comments")  # type: ignore[return-value]
+
     async def get_check_runs(self, owner: str, repo: str, ref: str) -> list[dict[str, Any]]:
         """Get check runs for a specific commit ref.
 

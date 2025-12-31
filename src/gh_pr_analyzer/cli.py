@@ -89,11 +89,12 @@ async def analyze_user_prs(username: str | None = None) -> None:
                 # Fetch detailed data
                 pr_details = await client.get_pr_details(owner, repo, pr_number)
                 reviews = await client.get_pr_reviews(owner, repo, pr_number)
+                review_comments = await client.get_pr_review_comments(owner, repo, pr_number)
                 head_sha = pr_details["head"]["sha"]
                 check_runs = await client.get_check_runs(owner, repo, head_sha)
 
                 # Analyze
-                analysis = analyze_pr(pr_details, reviews, check_runs)
+                analysis = analyze_pr(pr_details, reviews, check_runs, review_comments)
                 analyses.append(analysis)
 
         # Display results
@@ -123,48 +124,70 @@ def display_results(analyses: list) -> None:
     table.add_column("Repository", style="cyan", no_wrap=True)
     table.add_column("PR #", style="blue")
     table.add_column("Title", style="white")
-    table.add_column("Merge Blockers", style="yellow")
+    table.add_column("CI Status", style="white", justify="center")
+    table.add_column("Reviews", style="white", justify="center")
+    table.add_column("Comments", style="white", justify="center")
+    table.add_column("Conflicts", style="white", justify="center")
 
     mergeable_count = 0
     blocked_count = 0
 
     for analysis in analyses:
-        # Format PR number with link
-        pr_link = Text(str(analysis.pr_number), style="link " + analysis.url)
-
-        # Format blockers with colors
+        # Track mergeable status
         if analysis.is_mergeable:
-            blockers_text = Text("✓ Ready to merge", style="bold green")
             mergeable_count += 1
         else:
             blocked_count += 1
-            blocker_lines = []
-            for blocker in analysis.blockers:
-                # Color-code by type
-                if blocker.type == "FAILING_CHECK":
-                    style = "bold red"
-                    icon = "✗"
-                elif blocker.type == "CHANGES_REQUESTED":
-                    style = "bold yellow"
-                    icon = "⚠"
-                elif blocker.type == "PENDING_CHECKS":
-                    style = "bold blue"
-                    icon = "⏳"
-                elif blocker.type == "MERGE_CONFLICT":
-                    style = "bold red"
-                    icon = "⚡"
-                else:
-                    style = "yellow"
-                    icon = "•"
 
-                blocker_line = f"{icon} {blocker.description}"
-                if blocker.details:
-                    blocker_line += f"\n   {blocker.details}"
-                blocker_lines.append(blocker_line)
+        # Format CI Status
+        if analysis.ci_status == "passing":
+            ci_text = Text("✅ Passing", style="bold green")
+        elif analysis.ci_status == "failing":
+            ci_text = Text(f"❌ Failing ({analysis.failed_check_count})", style="bold red")
+        elif analysis.ci_status == "pending":
+            ci_text = Text(f"⏳ Pending ({analysis.pending_check_count})", style="bold yellow")
+        else:
+            ci_text = Text("⏳ Unknown", style="dim")
 
-            blockers_text = Text("\n".join(blocker_lines))
+        # Format Reviews
+        if analysis.review_status == "approved":
+            review_text = Text("✅ Approved", style="bold green")
+        elif analysis.review_status == "changes_requested":
+            review_text = Text("❌ Changes requested", style="bold red")
+        elif analysis.review_status == "pending":
+            review_text = Text("⏳ Pending", style="bold yellow")
+        elif analysis.review_status == "none":
+            review_text = Text("➖ None", style="dim")
+        else:
+            review_text = Text("⏳ Unknown", style="dim")
 
-        table.add_row(analysis.repo, str(analysis.pr_number), analysis.title[:50], blockers_text)
+        # Format Comments
+        if analysis.comments_status == "resolved":
+            comments_text = Text("✅ Resolved", style="bold green")
+        elif analysis.comments_status == "unresolved":
+            comments_text = Text(f"❌ {analysis.unresolved_comment_count} unresolved", style="bold red")
+        elif analysis.comments_status == "none":
+            comments_text = Text("➖ None", style="dim")
+        else:
+            comments_text = Text("⏳ Unknown", style="dim")
+
+        # Format Conflicts
+        if analysis.conflicts_status == "clean":
+            conflicts_text = Text("✅ Clean", style="bold green")
+        elif analysis.conflicts_status == "conflicts":
+            conflicts_text = Text("❌ Has conflicts", style="bold red")
+        else:
+            conflicts_text = Text("⏳ Unknown", style="dim")
+
+        table.add_row(
+            analysis.repo,
+            str(analysis.pr_number),
+            analysis.title[:50],
+            ci_text,
+            review_text,
+            comments_text,
+            conflicts_text,
+        )
 
     console.print(table)
 
