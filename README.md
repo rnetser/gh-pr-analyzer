@@ -13,6 +13,7 @@ A CLI tool that analyzes GitHub pull requests and shows why they cannot be merge
   - **Comments**: Displays unresolved comment counts with clickable links
   - **Merge Conflicts**: Detects branch conflicts
 - **Beautiful terminal output** with Rich tables and color-coded status indicators
+- **HTML export** for shareable reports with styled tables and clickable links
 - **Organized multi-column layout** for quick scanning
 - **Summary statistics** showing ready-to-merge vs blocked PRs
 - **Fast async** HTTP requests for quick analysis
@@ -70,6 +71,22 @@ uv run gh-pr-analyzer
 # Analyze another user's PRs
 uv run gh-pr-analyzer username
 ```
+
+### HTML Export
+
+```bash
+# Export results to an HTML file
+uv run gh-pr-analyzer username --html report.html
+
+# Export your own PRs to HTML
+uv run gh-pr-analyzer --html my-prs.html
+```
+
+The HTML export includes:
+- Styled table with color-coded status badges
+- Clickable links to PRs and unresolved comments
+- Summary statistics
+- Generation timestamp
 
 ## Example Output
 
