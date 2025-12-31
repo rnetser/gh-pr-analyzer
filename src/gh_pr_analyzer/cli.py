@@ -113,7 +113,12 @@ def display_results(analyses: list) -> None:
     Args:
         analyses: List of PRAnalysis objects
     """
-    table = Table(title="PR Analysis Results", show_header=True, header_style="bold magenta")
+    table = Table(
+        title="PR Analysis Results",
+        show_header=True,
+        header_style="bold magenta",
+        show_lines=True,  # Add horizontal separators between rows
+    )
 
     table.add_column("Repository", style="cyan", no_wrap=True)
     table.add_column("PR #", style="blue")
