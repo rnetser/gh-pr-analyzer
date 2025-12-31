@@ -35,6 +35,9 @@ class PRAnalysis:
     unresolved_comment_count: int = 0
     failed_check_count: int = 0
     pending_check_count: int = 0
+    failed_check_names: list[str] = field(default_factory=list)
+    pending_check_names: list[str] = field(default_factory=list)
+    unresolved_comment_urls: list[str] = field(default_factory=list)
 
     @property
     def is_mergeable(self) -> bool:
@@ -90,6 +93,7 @@ def analyze_pr(
     # Check for failing check runs
     failed_checks = [check for check in check_runs if check.get("conclusion") == "failure"]
     analysis.failed_check_count = len(failed_checks)
+    analysis.failed_check_names = [check.get("name", "Unknown check") for check in failed_checks]
 
     for check in failed_checks:
         output = check.get("output", {})
@@ -113,6 +117,7 @@ def analyze_pr(
         check for check in check_runs if check.get("status") != "completed" and check.get("conclusion") is None
     ]
     analysis.pending_check_count = len(pending_checks)
+    analysis.pending_check_names = [check.get("name", "Unknown") for check in pending_checks]
 
     if pending_checks:
         check_names = ", ".join(check.get("name", "Unknown") for check in pending_checks[:3])
@@ -198,6 +203,7 @@ def analyze_pr(
         unresolved_comments = [c for c in top_level_comments if c["id"] not in reply_to_ids]
 
         analysis.unresolved_comment_count = len(unresolved_comments)
+        analysis.unresolved_comment_urls = [c.get("html_url", "") for c in unresolved_comments if c.get("html_url")]
 
         if unresolved_comments:
             analysis.comments_status = "unresolved"

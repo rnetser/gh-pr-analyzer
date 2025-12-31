@@ -143,9 +143,13 @@ def display_results(analyses: list) -> None:
         if analysis.ci_status == "passing":
             ci_text = Text("✅ Passing", style="bold green")
         elif analysis.ci_status == "failing":
-            ci_text = Text(f"❌ Failing ({analysis.failed_check_count})", style="bold red")
+            ci_text = Text("❌ Failing:\n", style="bold red")
+            for check_name in analysis.failed_check_names:
+                ci_text.append(f"  • {check_name}\n", style="red")
         elif analysis.ci_status == "pending":
-            ci_text = Text(f"⏳ Pending ({analysis.pending_check_count})", style="bold yellow")
+            ci_text = Text("⏳ Pending:\n", style="bold yellow")
+            for check_name in analysis.pending_check_names:
+                ci_text.append(f"  • {check_name}\n", style="yellow")
         else:
             ci_text = Text("⏳ Unknown", style="dim")
 
@@ -165,7 +169,12 @@ def display_results(analyses: list) -> None:
         if analysis.comments_status == "resolved":
             comments_text = Text("✅ Resolved", style="bold green")
         elif analysis.comments_status == "unresolved":
-            comments_text = Text(f"❌ {analysis.unresolved_comment_count} unresolved", style="bold red")
+            comments_text = Text(f"❌ {analysis.unresolved_comment_count} unresolved:\n", style="bold red")
+            for url in analysis.unresolved_comment_urls:
+                # Use Rich's link markup syntax for clickable links
+                comments_text.append(f"  • ", style="red")
+                comments_text.append(url, style="link " + url)
+                comments_text.append("\n")
         elif analysis.comments_status == "none":
             comments_text = Text("➖ None", style="dim")
         else:
