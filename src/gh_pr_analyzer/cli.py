@@ -295,6 +295,24 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
             </div>
         </header>
 
+        <div class="summary">
+            <h2>Summary</h2>
+            <div class="summary-stats">
+                <div class="stat">
+                    <span class="stat-label">Total PRs analyzed:</span>
+                    <span class="stat-value blue">{len(analyses)}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Ready to merge:</span>
+                    <span class="stat-value green">{mergeable_count}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Blocked:</span>
+                    <span class="stat-value red">{blocked_count}</span>
+                </div>
+            </div>
+        </div>
+
         <table>
             <thead>
                 <tr>
@@ -362,10 +380,8 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
         elif analysis.comments_status == "unresolved":
             comments_content = [f'<div><span class="status-badge status-failing">❌ {analysis.unresolved_comment_count} unresolved</span></div>']
             comments_content.append('<div class="comment-list">')
-            for url in analysis.unresolved_comment_urls[:5]:  # Limit to 5 links
+            for url in analysis.unresolved_comment_urls:  # Show all URLs
                 comments_content.append(f'<div class="comment-item">• <a href="{escape(url)}" class="comment-link" target="_blank">{escape(url)}</a></div>')
-            if len(analysis.unresolved_comment_urls) > 5:
-                comments_content.append(f'<div class="comment-item">... and {len(analysis.unresolved_comment_urls) - 5} more</div>')
             comments_content.append('</div>')
             comments_cell = f'<td>{"".join(comments_content)}</td>'
         elif analysis.comments_status == "none":
@@ -394,28 +410,10 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
                 </tr>
 """
 
-    # Close table and add summary
+    # Close table
     html_content += f"""
             </tbody>
         </table>
-
-        <div class="summary">
-            <h2>Summary</h2>
-            <div class="summary-stats">
-                <div class="stat">
-                    <span class="stat-label">Ready to merge:</span>
-                    <span class="stat-value green">{mergeable_count}</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Blocked:</span>
-                    <span class="stat-value red">{blocked_count}</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Total PRs analyzed:</span>
-                    <span class="stat-value blue">{len(analyses)}</span>
-                </div>
-            </div>
-        </div>
     </div>
 </body>
 </html>
