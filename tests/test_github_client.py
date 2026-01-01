@@ -29,18 +29,18 @@ class TestGitHubClientInit:
             assert client.token == mock_token
 
     def test_init_without_token(self):
-        """Test initialization without token raises ValueError."""
+        """Test client initializes without token (unauthenticated mode)."""
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="GitHub token not found"):
-                GitHubClient()
+            client = GitHubClient()
+            assert client.is_authenticated is False
+            assert "Authorization" not in client.headers
 
     def test_init_with_empty_token(self):
-        """Test initialization with empty token raises ValueError."""
-        # Empty string is falsy in Python, so it triggers fallback to env var
-        # We need to clear the environment to test this properly
+        """Test client with empty token uses unauthenticated mode."""
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="GitHub token not found"):
-                GitHubClient(token="")
+            client = GitHubClient(token="")
+            assert client.is_authenticated is False
+            assert "Authorization" not in client.headers
 
 
 class TestGitHubClientRequest:
