@@ -38,7 +38,19 @@ uv sync
 
 ## Configuration
 
-The tool requires a GitHub personal access token to authenticate with the GitHub API.
+A GitHub personal access token is **optional** but recommended for better API limits and access to private repositories.
+
+### Token Options
+
+**Without a token:**
+- ✅ Access to public repositories only
+- ⚠️ Rate limited to 60 requests/hour
+- ⚠️ Warning banner shown in output
+
+**With a token:**
+- ✅ Access to public and private repositories
+- ✅ 5,000 requests/hour rate limit
+- ✅ Full functionality
 
 ### Creating a GitHub Token
 
@@ -62,10 +74,11 @@ To make this permanent, add it to your shell profile (`~/.bashrc`, `~/.zshrc`, e
 ## Usage
 
 ```bash
-# Set your GitHub token
-export GITHUB_TOKEN="your_token_here"
+# Analyze your own PRs (no token required, but limited)
+uv run gh-pr-analyzer
 
-# Analyze your own PRs
+# With authentication for better limits and private repo access
+export GITHUB_TOKEN="your_token_here"
 uv run gh-pr-analyzer
 
 # Analyze another user's PRs
@@ -83,9 +96,11 @@ uv run gh-pr-analyzer --html my-prs.html
 ```
 
 The HTML export includes:
+- Summary statistics at the top of the report
+- All unresolved comments with clickable links (no truncation)
+- Responsive design that fits browser width
 - Styled table with color-coded status badges
-- Clickable links to PRs and unresolved comments
-- Summary statistics
+- Warning banner when running without authentication token
 - Generation timestamp
 
 ## Example Output

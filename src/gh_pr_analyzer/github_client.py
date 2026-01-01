@@ -14,17 +14,18 @@ class GitHubClient:
 
         Args:
             token: GitHub personal access token. If not provided, reads from GITHUB_TOKEN env var.
+                  If no token is available, unauthenticated requests are allowed (rate limited to 60/hour, public repos only).
         """
         self.token = token or os.getenv("GITHUB_TOKEN")
-        if not self.token:
-            raise ValueError("GitHub token not found. Set GITHUB_TOKEN environment variable.")
-
+        self.base_url = "https://api.github.com"
         self.headers = {
-            "Authorization": f"Bearer {self.token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        self.base_url = "https://api.github.com"
+        if self.token:
+            self.headers["Authorization"] = f"Bearer {self.token}"
+
+        self.is_authenticated = bool(self.token)
 
     async def _request(self, method: str, endpoint: str, **kwargs: Any) -> dict[str, Any] | list[dict[str, Any]]:
         """Make an HTTP request to GitHub API.

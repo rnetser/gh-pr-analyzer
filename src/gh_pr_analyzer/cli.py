@@ -55,13 +55,14 @@ def parse_repo_from_url(url: str) -> tuple[str, str]:
     return path_parts[0], path_parts[1]
 
 
-def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> None:
+def export_to_html(analyses: list[PRAnalysis], filename: str, username: str, is_authenticated: bool = True) -> None:
     """Export analysis results to an HTML file.
 
     Args:
         analyses: List of PRAnalysis objects
         filename: Output HTML filename
         username: GitHub username being analyzed
+        is_authenticated: Whether the client was authenticated when fetching data
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -87,7 +88,9 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 2rem;
+            max-width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
         }}
 
         .container {{
@@ -119,10 +122,22 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
             margin-right: 1.5rem;
         }}
 
+        .warning-banner {{
+            background: #fef5e7;
+            border: 2px solid #f39c12;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem;
+            color: #975a16;
+            font-weight: 600;
+            text-align: center;
+        }}
+
         table {{
             width: 100%;
             border-collapse: collapse;
             font-size: 0.9rem;
+            table-layout: auto;
         }}
 
         thead {{
@@ -144,6 +159,8 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
             padding: 1rem;
             border-bottom: 1px solid #e2e8f0;
             vertical-align: top;
+            word-wrap: break-word;
+            max-width: 300px;
         }}
 
         tbody tr:hover {{
@@ -283,6 +300,16 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
             margin: 0.25rem 0;
             padding-left: 1rem;
         }}
+
+        /* Responsive for mobile */
+        @media (max-width: 768px) {{
+            table {{
+                font-size: 12px;
+            }}
+            td, th {{
+                padding: 8px 4px;
+            }}
+        }}
     </style>
 </head>
 <body>
@@ -294,7 +321,17 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str) -> 
                 <span>📅 Generated: <strong>{timestamp}</strong></span>
             </div>
         </header>
+"""
 
+    # Add warning banner if unauthenticated
+    if not is_authenticated:
+        html_content += """
+        <div class="warning-banner">
+            ⚠️ Warning: No GitHub token provided. Only public repository data is included. Private repositories are not shown.
+        </div>
+"""
+
+    html_content += """
         <div class="summary">
             <h2>Summary</h2>
             <div class="summary-stats">
@@ -435,6 +472,10 @@ async def analyze_user_prs(username: str | None = None, html_output: str | None 
     try:
         client = GitHubClient()
 
+        # Warn if unauthenticated
+        if not client.is_authenticated:
+            console.print("[yellow]⚠️  No GITHUB_TOKEN set. Only public repository data will be collected.[/yellow]\n")
+
         # Get username if not provided
         if not username:
             with console.status("[bold blue]Fetching authenticated user..."):
@@ -476,7 +517,7 @@ async def analyze_user_prs(username: str | None = None, html_output: str | None 
 
         # Export to HTML if requested
         if html_output:
-            export_to_html(analyses, html_output, username)
+            export_to_html(analyses, html_output, username, client.is_authenticated)
 
     except ValueError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
