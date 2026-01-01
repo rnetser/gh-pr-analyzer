@@ -49,13 +49,29 @@ class GitHubClient:
                 return response.json()
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
+                # Try to get error details from response body
+                try:
+                    error_body = e.response.json()
+                    error_message = error_body.get("message", "Unknown error")
+                    error_details = error_body.get("errors", [])
+                    if error_details:
+                        details_str = "; ".join(
+                            f"{err.get('field', 'unknown')}: {err.get('message', err.get('code', 'error'))}"
+                            for err in error_details
+                        )
+                        error_message = f"{error_message} ({details_str})"
+                except Exception:
+                    error_message = e.response.text[:200] if e.response.text else "No details"
+
                 if status == 401:
-                    raise ValueError("Invalid or expired GitHub token") from None
+                    raise ValueError(f"Invalid or expired GitHub token: {error_message}") from None
                 elif status == 403:
-                    raise ValueError("GitHub API rate limit exceeded or permission denied") from None
+                    raise ValueError(f"GitHub API forbidden (rate limit or permissions): {error_message}") from None
                 elif status == 404:
-                    raise ValueError(f"Resource not found: {endpoint}") from None
-                raise ValueError(f"GitHub API error: {status}") from None
+                    raise ValueError(f"Resource not found: {error_message}") from None
+                elif status == 422:
+                    raise ValueError(f"GitHub API validation error: {error_message}") from None
+                raise ValueError(f"GitHub API error {status}: {error_message}") from None
             except httpx.TimeoutException:
                 raise ValueError(f"Request timed out after 30 seconds") from None
             except httpx.ConnectError:
