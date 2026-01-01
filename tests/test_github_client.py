@@ -82,7 +82,7 @@ class TestGitHubClientRequest:
         )
 
         client = GitHubClient(token=mock_token)
-        with pytest.raises(ValueError, match="Resource not found: /repos/owner/repo"):
+        with pytest.raises(ValueError, match="Resource not found: Not Found"):
             await client._request("GET", "/repos/owner/repo")
 
     @pytest.mark.asyncio
@@ -108,7 +108,7 @@ class TestGitHubClientRequest:
         )
 
         client = GitHubClient(token=mock_token)
-        with pytest.raises(ValueError, match="GitHub API rate limit exceeded or permission denied"):
+        with pytest.raises(ValueError, match="GitHub API forbidden \\(rate limit or permissions\\): API rate limit exceeded"):
             await client._request("GET", "/user")
 
     @pytest.mark.asyncio
@@ -236,7 +236,7 @@ class TestGitHubClientGetPRDetails:
         )
 
         client = GitHubClient(token=mock_token)
-        with pytest.raises(ValueError, match="Resource not found: /repos/owner/repo/pulls/999"):
+        with pytest.raises(ValueError, match="Resource not found: Not Found"):
             await client.get_pr_details("owner", "repo", 999)
 
 
