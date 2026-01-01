@@ -331,7 +331,7 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str, is_
         </div>
 """
 
-    html_content += """
+    html_content += f"""
         <div class="summary">
             <h2>Summary</h2>
             <div class="summary-stats">
