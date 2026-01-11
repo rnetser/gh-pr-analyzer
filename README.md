@@ -1,3 +1,4 @@
+<!-- Generated using Claude cli -->
 # gh-pr-analyzer
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -46,11 +47,13 @@ A GitHub personal access token is **optional** but recommended for better API li
 - ✅ Access to public repositories only
 - ⚠️ Rate limited to 60 requests/hour
 - ⚠️ Warning banner shown in output
+- ⚠️ **Username argument is REQUIRED** (cannot analyze your own PRs)
 
 **With a token:**
 - ✅ Access to public and private repositories
 - ✅ 5,000 requests/hour rate limit
 - ✅ Full functionality
+- ✅ Username is optional (defaults to authenticated user)
 
 ### Creating a GitHub Token
 
@@ -74,24 +77,28 @@ To make this permanent, add it to your shell profile (`~/.bashrc`, `~/.zshrc`, e
 ## Usage
 
 ```bash
-# Analyze your own PRs (no token required, but limited)
-uv run gh-pr-analyzer
+# Without token: username is REQUIRED
+uv run gh-pr-analyzer <username>
 
-# With authentication for better limits and private repo access
+# With token: analyze your own PRs (username optional)
 export GITHUB_TOKEN="your_token_here"
 uv run gh-pr-analyzer
 
-# Analyze another user's PRs
-uv run gh-pr-analyzer username
+# With token: analyze another user's PRs
+export GITHUB_TOKEN="your_token_here"
+uv run gh-pr-analyzer <username>
 ```
+
+**Important:** Without a `GITHUB_TOKEN`, you **must** provide a username argument. The token is required to analyze your own PRs.
 
 ### HTML Export
 
 ```bash
-# Export results to an HTML file
+# Export another user's PRs to an HTML file
 uv run gh-pr-analyzer username --html report.html
 
-# Export your own PRs to HTML
+# Export your own PRs to HTML (requires GITHUB_TOKEN)
+export GITHUB_TOKEN="your_token_here"
 uv run gh-pr-analyzer --html my-prs.html
 ```
 

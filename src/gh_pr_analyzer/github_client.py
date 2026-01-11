@@ -1,3 +1,4 @@
+# Generated using Claude cli
 """GitHub API client for fetching PR data."""
 
 import os
@@ -64,7 +65,16 @@ class GitHubClient:
                     error_message = e.response.text[:200] if e.response.text else "No details"
 
                 if status == 401:
-                    raise ValueError(f"Invalid or expired GitHub token: {error_message}") from None
+                    if not self.token:
+                        raise ValueError(
+                            "No GitHub token configured. Set GITHUB_TOKEN environment variable with a Personal Access Token (PAT) "
+                            "for higher rate limits (5000/hour vs 60/hour) and access to private repositories."
+                        ) from None
+                    else:
+                        raise ValueError(
+                            f"Invalid or expired GitHub token: {error_message}. "
+                            "Use a valid Personal Access Token (PAT) for higher rate limits and private repository access."
+                        ) from None
                 elif status == 403:
                     raise ValueError(f"GitHub API forbidden (rate limit or permissions): {error_message}") from None
                 elif status == 404:

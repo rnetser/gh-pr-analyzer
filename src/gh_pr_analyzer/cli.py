@@ -1,6 +1,8 @@
+# Generated using Claude cli
 """CLI interface for GitHub PR analyzer."""
 
 import asyncio
+import os
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -94,7 +96,7 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str, is_
         }}
 
         .container {{
-            max-width: 1400px;
+            max-width: 98%;
             margin: 0 auto;
             background: white;
             border-radius: 12px;
@@ -160,7 +162,6 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str, is_
             border-bottom: 1px solid #e2e8f0;
             vertical-align: top;
             word-wrap: break-word;
-            max-width: 300px;
         }}
 
         tbody tr:hover {{
@@ -472,15 +473,32 @@ async def analyze_user_prs(username: str | None = None, html_output: str | None 
     try:
         client = GitHubClient()
 
-        # Warn if unauthenticated
-        if not client.is_authenticated:
-            console.print("[yellow]⚠️  No GITHUB_TOKEN set. Only public repository data will be collected.[/yellow]\n")
-
         # Get username if not provided
         if not username:
+            # If no username and not authenticated, we can't proceed
+            if not client.is_authenticated:
+                console.print("[bold red]Error:[/bold red] Username is required when GITHUB_TOKEN is not set.\n")
+                console.print("[bold]Either:[/bold]")
+                console.print("  1. Provide a username: [cyan]gh-pr-analyzer <username>[/cyan]")
+                console.print("  2. Set GITHUB_TOKEN with a Personal Access Token (PAT) for:")
+                console.print("     • Higher rate limits (5000/hour vs 60/hour)")
+                console.print("     • Access to private repositories")
+                console.print("     • Ability to analyze your own PRs without specifying username\n")
+                console.print("Create a token at: [link]https://github.com/settings/tokens[/link]")
+                raise typer.Exit(1)
+
+            # Get authenticated user's username
             with console.status("[bold blue]Fetching authenticated user..."):
                 user_data = await client.get_authenticated_user()
                 username = user_data["login"]
+
+        # Warn if unauthenticated
+        if not client.is_authenticated:
+            console.print("[yellow]⚠️  No GITHUB_TOKEN set. Only public repository data will be collected.[/yellow]")
+            console.print("[dim]   Tip: Set GITHUB_TOKEN with a Personal Access Token (PAT) for:[/dim]")
+            console.print("[dim]   • Higher rate limits (5000/hour vs 60/hour)[/dim]")
+            console.print("[dim]   • Access to private repositories[/dim]")
+            console.print("[dim]   Create a token at: https://github.com/settings/tokens[/dim]\n")
 
         # Fetch open PRs
         with console.status(f"[bold blue]Fetching open PRs for {username}..."):
@@ -639,6 +657,18 @@ def main(
     html: Optional[str] = typer.Option(None, "--html", help="Export results to HTML file"),
 ) -> None:
     """Analyze all open PRs for a GitHub user and show merge blockers."""
+    # Early validation: username is mandatory when GITHUB_TOKEN is not set
+    if not username and not os.getenv("GITHUB_TOKEN"):
+        console.print("[bold red]Error:[/bold red] Username is required when GITHUB_TOKEN is not set.\n")
+        console.print("[bold]Either:[/bold]")
+        console.print("  1. Provide a username: [cyan]gh-pr-analyzer <username>[/cyan]")
+        console.print("  2. Set GITHUB_TOKEN with a Personal Access Token (PAT) for:")
+        console.print("     • Higher rate limits (5000/hour vs 60/hour)")
+        console.print("     • Access to private repositories")
+        console.print("     • Ability to analyze your own PRs without specifying username\n")
+        console.print("Create a token at: [link]https://github.com/settings/tokens[/link]")
+        raise typer.Exit(1)
+
     asyncio.run(analyze_user_prs(username, html_output=html))
 
 

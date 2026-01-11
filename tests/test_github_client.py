@@ -1,3 +1,4 @@
+# Generated using Claude cli
 """Tests for GitHubClient."""
 
 import os

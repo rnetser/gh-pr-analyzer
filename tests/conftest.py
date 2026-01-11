@@ -1,3 +1,4 @@
+# Generated using Claude cli
 """Pytest configuration and shared fixtures."""
 
 import pytest

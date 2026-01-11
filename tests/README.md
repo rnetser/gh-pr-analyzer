@@ -1,3 +1,4 @@
+<!-- Generated using Claude cli -->
 # Test Suite for gh-pr-analyzer
 
 This directory contains comprehensive unit tests for the gh-pr-analyzer project.

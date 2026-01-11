@@ -1,3 +1,4 @@
+# Generated using Claude cli
 """PR analysis logic to detect merge blockers."""
 
 from dataclasses import dataclass, field
