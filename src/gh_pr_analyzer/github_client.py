@@ -134,8 +134,67 @@ class GitHubClient:
         """
         return await self._request("GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews")  # type: ignore[return-value]
 
-    async def get_pr_review_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
-        """Get all review threads/comments to check for unresolved ones.
+    async def _graphql_request(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Make a GraphQL request to GitHub API.
+
+        Args:
+            query: GraphQL query string
+            variables: Query variables
+
+        Returns:
+            JSON response from API
+
+        Raises:
+            ValueError: For HTTP errors, network errors, or timeouts
+        """
+        url = f"{self.base_url}/graphql"
+        payload: dict[str, Any] = {"query": query}
+        if variables:
+            payload["variables"] = variables
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, headers=self.headers, json=payload, timeout=30.0)
+                response.raise_for_status()
+                result = response.json()
+
+                # GraphQL returns 200 even for errors, check for errors in response
+                if "errors" in result:
+                    error_messages = "; ".join(err.get("message", "Unknown error") for err in result["errors"])
+                    raise ValueError(f"GraphQL error: {error_messages}") from None
+
+                return result
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                try:
+                    error_body = e.response.json()
+                    error_message = error_body.get("message", "Unknown error")
+                except Exception:
+                    error_message = e.response.text[:200] if e.response.text else "No details"
+
+                if status == 401:
+                    if not self.token:
+                        raise ValueError(
+                            "No GitHub token configured. GraphQL API requires authentication. "
+                            "Set GITHUB_TOKEN environment variable with a Personal Access Token (PAT)."
+                        ) from None
+                    else:
+                        raise ValueError(
+                            f"Invalid or expired GitHub token: {error_message}. "
+                            "GraphQL API requires a valid Personal Access Token (PAT)."
+                        ) from None
+                elif status == 403:
+                    raise ValueError(f"GitHub API forbidden (rate limit or permissions): {error_message}") from None
+                raise ValueError(f"GitHub API error {status}: {error_message}") from None
+            except httpx.TimeoutException:
+                raise ValueError("Request timed out after 30 seconds") from None
+            except httpx.ConnectError:
+                raise ValueError("Failed to connect to GitHub API. Check your network connection.") from None
+
+    async def get_pr_review_threads(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
+        """Get all review threads with resolution status using GraphQL API.
+
+        Uses GraphQL because the REST API does not expose thread resolution status.
 
         Args:
             owner: Repository owner
@@ -143,9 +202,66 @@ class GitHubClient:
             pr_number: PR number
 
         Returns:
-            List of review comment dictionaries
+            List of review thread dictionaries with 'isResolved' and comment details
         """
-        return await self._request("GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/comments")  # type: ignore[return-value]
+        query = """
+        query($owner: String!, $repo: String!, $pr_number: Int!, $cursor: String) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $pr_number) {
+              reviewThreads(first: 100, after: $cursor) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  isResolved
+                  isOutdated
+                  comments(first: 1) {
+                    nodes {
+                      url
+                      author {
+                        login
+                      }
+                      body
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+        all_threads: list[dict[str, Any]] = []
+        cursor: str | None = None
+        max_pages = 50
+        page = 0
+
+        while True:
+            page += 1
+            if page > max_pages:
+                break
+            variables: dict[str, Any] = {
+                "owner": owner,
+                "repo": repo,
+                "pr_number": pr_number,
+                "cursor": cursor,
+            }
+            result = await self._graphql_request(query, variables)
+
+            data = result.get("data") or {}
+            repository = data.get("repository") or {}
+            pull_request = repository.get("pullRequest") or {}
+            review_threads = pull_request.get("reviewThreads") or {}
+            nodes = review_threads.get("nodes") or []
+            all_threads.extend(nodes)
+
+            page_info = review_threads.get("pageInfo") or {}
+            if page_info.get("hasNextPage"):
+                cursor = page_info["endCursor"]
+            else:
+                break
+
+        return all_threads
 
     async def get_check_runs(self, owner: str, repo: str, ref: str) -> list[dict[str, Any]]:
         """Get check runs for a specific commit ref.

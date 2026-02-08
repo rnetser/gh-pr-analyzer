@@ -50,7 +50,7 @@ def analyze_pr(
     pr_data: dict[str, Any],
     reviews: list[dict[str, Any]],
     check_runs: list[dict[str, Any]],
-    review_comments: list[dict[str, Any]] | None = None,
+    review_threads: list[dict[str, Any]] | None = None,
 ) -> PRAnalysis:
     """Analyze a PR to identify merge blockers.
 
@@ -58,7 +58,7 @@ def analyze_pr(
         pr_data: PR details from GitHub API
         reviews: List of reviews for the PR
         check_runs: List of check runs for the PR's head commit
-        review_comments: List of review comments (optional)
+        review_threads: List of review threads from GraphQL API with resolution status (optional)
 
     Returns:
         PRAnalysis object with identified blockers
@@ -70,8 +70,8 @@ def analyze_pr(
 
     analysis = PRAnalysis(repo=repo_full_name, pr_number=pr_number, title=title, url=url)
 
-    if review_comments is None:
-        review_comments = []
+    if review_threads is None:
+        review_threads = []
 
     # Check mergeable state
     mergeable_state = pr_data.get("mergeable_state", "unknown")
@@ -188,30 +188,23 @@ def analyze_pr(
         else:
             analysis.review_status = "none"
 
-    # Check for unresolved review comments
-    # A comment is considered unresolved if it has no replies or the thread is still open
-    if review_comments:
-        # Group comments by thread (conversation_id or in_reply_to_id)
-        # Comments without replies are potentially unresolved
-        comment_ids = {comment["id"] for comment in review_comments}
-        # Comments that are replies to other comments
-        reply_to_ids = {comment.get("in_reply_to_id") for comment in review_comments if comment.get("in_reply_to_id")}
+    # Check for unresolved review comments using GraphQL review thread data
+    if review_threads:
+        unresolved_threads = [t for t in review_threads if not t.get("isResolved", False)]
 
-        # Top-level comments (not replies)
-        top_level_comments = [c for c in review_comments if not c.get("in_reply_to_id")]
+        analysis.unresolved_comment_count = len(unresolved_threads)
+        analysis.unresolved_comment_urls = []
+        for thread in unresolved_threads:
+            comments = thread.get("comments", {}).get("nodes", [])
+            if comments and comments[0].get("url"):
+                analysis.unresolved_comment_urls.append(comments[0]["url"])
 
-        # Count unresolved: top-level comments that have no replies
-        unresolved_comments = [c for c in top_level_comments if c["id"] not in reply_to_ids]
-
-        analysis.unresolved_comment_count = len(unresolved_comments)
-        analysis.unresolved_comment_urls = [c.get("html_url", "") for c in unresolved_comments if c.get("html_url")]
-
-        if unresolved_comments:
+        if unresolved_threads:
             analysis.comments_status = "unresolved"
             analysis.blockers.append(
                 MergeBlocker(
                     type="UNRESOLVED_COMMENTS",
-                    description=f"{len(unresolved_comments)} unresolved review comment(s)",
+                    description=f"{len(unresolved_threads)} unresolved review comment(s)",
                     details="Review and resolve all discussion threads",
                 )
             )

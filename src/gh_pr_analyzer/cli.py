@@ -522,12 +522,12 @@ async def analyze_user_prs(username: str | None = None, html_output: str | None 
                 # Fetch detailed data
                 pr_details = await client.get_pr_details(owner, repo, pr_number)
                 reviews = await client.get_pr_reviews(owner, repo, pr_number)
-                review_comments = await client.get_pr_review_comments(owner, repo, pr_number)
+                review_threads = await client.get_pr_review_threads(owner, repo, pr_number) if client.is_authenticated else None
                 head_sha = pr_details["head"]["sha"]
                 check_runs = await client.get_check_runs(owner, repo, head_sha)
 
                 # Analyze
-                analysis = analyze_pr(pr_details, reviews, check_runs, review_comments)
+                analysis = analyze_pr(pr_details, reviews, check_runs, review_threads)
                 analyses.append(analysis)
 
         # Display results

@@ -525,3 +525,247 @@ class TestAnalyzePREdgeCases:
         assert "Error line 99" in analysis.blockers[0].details
         assert "Error line 95" in analysis.blockers[0].details
         assert "Error line 0" not in analysis.blockers[0].details
+
+
+class TestAnalyzePRUnresolvedComments:
+    """Test analyze_pr with review thread resolution status."""
+
+    def test_analyze_pr_no_review_threads(self, mock_pr_data):
+        """Test that comments_status is 'none' when review_threads is None."""
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=None)
+
+        assert analysis.comments_status == "none"
+        assert analysis.unresolved_comment_count == 0
+        assert analysis.unresolved_comment_urls == []
+
+    def test_analyze_pr_empty_review_threads(self, mock_pr_data):
+        """Test that comments_status is 'none' when review_threads is empty list."""
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=[])
+
+        assert analysis.comments_status == "none"
+        assert analysis.unresolved_comment_count == 0
+        assert analysis.unresolved_comment_urls == []
+
+    def test_analyze_pr_all_threads_resolved(self, mock_pr_data):
+        """Test that all resolved threads produce 'resolved' status and no blockers."""
+        review_threads = [
+            {
+                "isResolved": True,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r100",
+                            "author": {"login": "reviewer1"},
+                            "body": "Looks good now",
+                        }
+                    ]
+                },
+            },
+            {
+                "isResolved": True,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r101",
+                            "author": {"login": "reviewer2"},
+                            "body": "Fixed",
+                        }
+                    ]
+                },
+            },
+        ]
+
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=review_threads)
+
+        assert analysis.comments_status == "resolved"
+        assert analysis.unresolved_comment_count == 0
+        assert analysis.unresolved_comment_urls == []
+        # No UNRESOLVED_COMMENTS blocker should exist
+        unresolved_blockers = [b for b in analysis.blockers if b.type == "UNRESOLVED_COMMENTS"]
+        assert len(unresolved_blockers) == 0
+
+    def test_analyze_pr_some_threads_unresolved(self, mock_pr_data):
+        """Test that a mix of resolved and unresolved threads detects correct count."""
+        review_threads = [
+            {
+                "isResolved": True,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r100",
+                            "author": {"login": "reviewer1"},
+                            "body": "Resolved comment",
+                        }
+                    ]
+                },
+            },
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r200",
+                            "author": {"login": "reviewer2"},
+                            "body": "Please fix this",
+                        }
+                    ]
+                },
+            },
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r201",
+                            "author": {"login": "reviewer3"},
+                            "body": "This needs work",
+                        }
+                    ]
+                },
+            },
+        ]
+
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=review_threads)
+
+        assert analysis.comments_status == "unresolved"
+        assert analysis.unresolved_comment_count == 2
+        assert len(analysis.unresolved_comment_urls) == 2
+        # Verify blocker exists
+        unresolved_blockers = [b for b in analysis.blockers if b.type == "UNRESOLVED_COMMENTS"]
+        assert len(unresolved_blockers) == 1
+        assert "2 unresolved review comment(s)" in unresolved_blockers[0].description
+
+    def test_analyze_pr_all_threads_unresolved(self, mock_pr_data):
+        """Test that all unresolved threads create a blocker."""
+        review_threads = [
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r300",
+                            "author": {"login": "reviewer1"},
+                            "body": "Fix this",
+                        }
+                    ]
+                },
+            },
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r301",
+                            "author": {"login": "reviewer2"},
+                            "body": "And this",
+                        }
+                    ]
+                },
+            },
+        ]
+
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=review_threads)
+
+        assert analysis.comments_status == "unresolved"
+        assert analysis.unresolved_comment_count == 2
+        assert analysis.is_mergeable is False
+        unresolved_blockers = [b for b in analysis.blockers if b.type == "UNRESOLVED_COMMENTS"]
+        assert len(unresolved_blockers) == 1
+        assert "2 unresolved review comment(s)" in unresolved_blockers[0].description
+
+    def test_analyze_pr_unresolved_thread_urls(self, mock_pr_data):
+        """Test that URLs are correctly extracted from thread comment nodes."""
+        review_threads = [
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r400",
+                            "author": {"login": "reviewer1"},
+                            "body": "Comment one",
+                        }
+                    ]
+                },
+            },
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r401",
+                            "author": {"login": "reviewer2"},
+                            "body": "Comment two",
+                        }
+                    ]
+                },
+            },
+        ]
+
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=review_threads)
+
+        assert len(analysis.unresolved_comment_urls) == 2
+        assert "https://github.com/owner/repo/pull/123#discussion_r400" in analysis.unresolved_comment_urls
+        assert "https://github.com/owner/repo/pull/123#discussion_r401" in analysis.unresolved_comment_urls
+
+    def test_analyze_pr_thread_without_url(self, mock_pr_data):
+        """Test that a thread with no URL in comments does not crash."""
+        review_threads = [
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "comments": {
+                    "nodes": [
+                        {
+                            "author": {"login": "reviewer1"},
+                            "body": "No URL here",
+                        }
+                    ]
+                },
+            },
+        ]
+
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=review_threads)
+
+        assert analysis.comments_status == "unresolved"
+        assert analysis.unresolved_comment_count == 1
+        assert analysis.unresolved_comment_urls == []
+        # Should still create blocker even without URL
+        unresolved_blockers = [b for b in analysis.blockers if b.type == "UNRESOLVED_COMMENTS"]
+        assert len(unresolved_blockers) == 1
+
+    def test_analyze_pr_outdated_unresolved_thread(self, mock_pr_data):
+        """Test that an outdated but unresolved thread is still counted."""
+        review_threads = [
+            {
+                "isResolved": False,
+                "isOutdated": True,
+                "comments": {
+                    "nodes": [
+                        {
+                            "url": "https://github.com/owner/repo/pull/123#discussion_r500",
+                            "author": {"login": "reviewer1"},
+                            "body": "Old comment still unresolved",
+                        }
+                    ]
+                },
+            },
+        ]
+
+        analysis = analyze_pr(mock_pr_data, [], [], review_threads=review_threads)
+
+        assert analysis.comments_status == "unresolved"
+        assert analysis.unresolved_comment_count == 1
+        assert len(analysis.unresolved_comment_urls) == 1
+        unresolved_blockers = [b for b in analysis.blockers if b.type == "UNRESOLVED_COMMENTS"]
+        assert len(unresolved_blockers) == 1
+        assert "1 unresolved review comment(s)" in unresolved_blockers[0].description

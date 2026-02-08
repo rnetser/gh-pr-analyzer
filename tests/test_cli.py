@@ -305,6 +305,7 @@ class TestAnalyzeUserPRs:
                 mock_client.get_user_open_prs.return_value = mock_user_prs
                 mock_client.get_pr_details.return_value = mock_pr_data
                 mock_client.get_pr_reviews.return_value = []
+                mock_client.get_pr_review_threads.return_value = []
                 mock_client.get_check_runs.return_value = []
 
                 with patch("gh_pr_analyzer.cli.display_results") as mock_display:
@@ -328,6 +329,7 @@ class TestAnalyzeUserPRs:
                 mock_client.get_user_open_prs.return_value = mock_user_prs
                 mock_client.get_pr_details.return_value = mock_pr_data
                 mock_client.get_pr_reviews.return_value = []
+                mock_client.get_pr_review_threads.return_value = []
                 mock_client.get_check_runs.return_value = []
 
                 with patch("gh_pr_analyzer.cli.display_results") as mock_display:
@@ -406,6 +408,7 @@ class TestAnalyzeUserPRs:
                 mock_client.get_user_open_prs.return_value = mock_user_prs
                 mock_client.get_pr_details.return_value = mock_pr_data
                 mock_client.get_pr_reviews.return_value = []
+                mock_client.get_pr_review_threads.return_value = []
                 mock_client.get_check_runs.return_value = []
 
                 with patch("gh_pr_analyzer.cli.display_results") as mock_display:
@@ -433,6 +436,7 @@ class TestAnalyzeUserPRs:
                 mock_client.get_user_open_prs.return_value = [mock_user_prs[0]]  # Just one PR
                 mock_client.get_pr_details.return_value = mock_pr_data
                 mock_client.get_pr_reviews.return_value = mock_reviews_approved
+                mock_client.get_pr_review_threads.return_value = []
                 mock_client.get_check_runs.return_value = mock_check_runs_passing
 
                 with patch("gh_pr_analyzer.cli.display_results"):

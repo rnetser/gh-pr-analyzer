@@ -364,6 +364,256 @@ class TestGitHubClientHeaders:
         assert request.headers["X-GitHub-Api-Version"] == "2022-11-28"
 
 
+class TestGitHubClientGraphQLRequest:
+    """Test GitHubClient GraphQL request method."""
+
+    @pytest.mark.asyncio
+    async def test_graphql_request_success(self, mock_token, httpx_mock: HTTPXMock):
+        """Test successful GraphQL request."""
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json={
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "title": "Test PR",
+                        }
+                    }
+                }
+            },
+        )
+
+        client = GitHubClient(token=mock_token)
+        result = await client._graphql_request(
+            "query { repository(owner: \"owner\", name: \"repo\") { pullRequest(number: 1) { title } } }"
+        )
+
+        assert result["data"]["repository"]["pullRequest"]["title"] == "Test PR"
+
+    @pytest.mark.asyncio
+    async def test_graphql_request_with_errors(self, mock_token, httpx_mock: HTTPXMock):
+        """Test GraphQL response containing errors field."""
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json={
+                "errors": [
+                    {"message": "Field 'unknown' doesn't exist on type 'Query'"},
+                ]
+            },
+        )
+
+        client = GitHubClient(token=mock_token)
+        with pytest.raises(ValueError, match="GraphQL error: Field 'unknown' doesn't exist on type 'Query'"):
+            await client._graphql_request("query { unknown }")
+
+    @pytest.mark.asyncio
+    async def test_graphql_request_401_with_token(self, mock_token, httpx_mock: HTTPXMock):
+        """Test 401 error with token configured."""
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            status_code=401,
+            json={"message": "Bad credentials"},
+        )
+
+        client = GitHubClient(token=mock_token)
+        with pytest.raises(ValueError, match="Invalid or expired GitHub token"):
+            await client._graphql_request("query { viewer { login } }")
+
+    @pytest.mark.asyncio
+    async def test_graphql_request_401_without_token(self, httpx_mock: HTTPXMock):
+        """Test 401 error without token configured."""
+        with patch.dict(os.environ, {}, clear=True):
+            httpx_mock.add_response(
+                url="https://api.github.com/graphql",
+                status_code=401,
+                json={"message": "Requires authentication"},
+            )
+
+            client = GitHubClient()
+            with pytest.raises(ValueError, match="No GitHub token configured.*GraphQL API requires authentication"):
+                await client._graphql_request("query { viewer { login } }")
+
+    @pytest.mark.asyncio
+    async def test_graphql_request_403(self, mock_token, httpx_mock: HTTPXMock):
+        """Test rate limit error on GraphQL endpoint."""
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            status_code=403,
+            json={"message": "API rate limit exceeded"},
+        )
+
+        client = GitHubClient(token=mock_token)
+        with pytest.raises(ValueError, match="GitHub API forbidden \\(rate limit or permissions\\): API rate limit exceeded"):
+            await client._graphql_request("query { viewer { login } }")
+
+
+class TestGitHubClientGetReviewThreads:
+    """Test get_pr_review_threads method."""
+
+    @pytest.mark.asyncio
+    async def test_get_review_threads_success(self, mock_token, httpx_mock: HTTPXMock):
+        """Test successfully returning review thread data."""
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json={
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": None,
+                                },
+                                "nodes": [
+                                    {
+                                        "isResolved": False,
+                                        "isOutdated": False,
+                                        "comments": {
+                                            "nodes": [
+                                                {
+                                                    "url": "https://github.com/owner/repo/pull/123#discussion_r100",
+                                                    "author": {"login": "reviewer1"},
+                                                    "body": "Please fix this",
+                                                }
+                                            ]
+                                        },
+                                    },
+                                    {
+                                        "isResolved": True,
+                                        "isOutdated": False,
+                                        "comments": {
+                                            "nodes": [
+                                                {
+                                                    "url": "https://github.com/owner/repo/pull/123#discussion_r101",
+                                                    "author": {"login": "reviewer2"},
+                                                    "body": "Looks good",
+                                                }
+                                            ]
+                                        },
+                                    },
+                                ],
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+        client = GitHubClient(token=mock_token)
+        threads = await client.get_pr_review_threads("owner", "repo", 123)
+
+        assert len(threads) == 2
+        assert threads[0]["isResolved"] is False
+        assert threads[1]["isResolved"] is True
+        assert threads[0]["comments"]["nodes"][0]["author"]["login"] == "reviewer1"
+
+    @pytest.mark.asyncio
+    async def test_get_review_threads_pagination(self, mock_token, httpx_mock: HTTPXMock):
+        """Test handling multiple pages of review threads."""
+        # First page
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json={
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "pageInfo": {
+                                    "hasNextPage": True,
+                                    "endCursor": "cursor_page1",
+                                },
+                                "nodes": [
+                                    {
+                                        "isResolved": False,
+                                        "isOutdated": False,
+                                        "comments": {
+                                            "nodes": [
+                                                {
+                                                    "url": "https://github.com/owner/repo/pull/123#discussion_r100",
+                                                    "author": {"login": "reviewer1"},
+                                                    "body": "First page thread",
+                                                }
+                                            ]
+                                        },
+                                    },
+                                ],
+                            }
+                        }
+                    }
+                }
+            },
+        )
+        # Second page
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json={
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": None,
+                                },
+                                "nodes": [
+                                    {
+                                        "isResolved": True,
+                                        "isOutdated": False,
+                                        "comments": {
+                                            "nodes": [
+                                                {
+                                                    "url": "https://github.com/owner/repo/pull/123#discussion_r200",
+                                                    "author": {"login": "reviewer2"},
+                                                    "body": "Second page thread",
+                                                }
+                                            ]
+                                        },
+                                    },
+                                ],
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+        client = GitHubClient(token=mock_token)
+        threads = await client.get_pr_review_threads("owner", "repo", 123)
+
+        assert len(threads) == 2
+        assert threads[0]["isResolved"] is False
+        assert threads[0]["comments"]["nodes"][0]["body"] == "First page thread"
+        assert threads[1]["isResolved"] is True
+        assert threads[1]["comments"]["nodes"][0]["body"] == "Second page thread"
+
+    @pytest.mark.asyncio
+    async def test_get_review_threads_empty(self, mock_token, httpx_mock: HTTPXMock):
+        """Test getting review threads when none exist."""
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json={
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": None,
+                                },
+                                "nodes": [],
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+        client = GitHubClient(token=mock_token)
+        threads = await client.get_pr_review_threads("owner", "repo", 123)
+
+        assert threads == []
+
+
 class TestGitHubClientEdgeCases:
     """Test edge cases and boundary conditions."""
 
