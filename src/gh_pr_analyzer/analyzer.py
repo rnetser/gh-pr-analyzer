@@ -20,6 +20,19 @@ class MergeBlocker:
         return f"{self.type}: {self.description}"
 
 
+# Usernames of known bots excluded from review label parsing.
+# GitHub App bots (ending in '[bot]') are automatically excluded.
+BOT_USERNAMES: set[str] = {"coderabbitai", "openshift-virtualization-qe-bot"}
+
+
+@dataclass
+class ReviewLabel:
+    """A review status from a PR label."""
+
+    username: str
+    status: str  # "lgtm", "approved", "changes-requested", "commented"
+
+
 @dataclass
 class PRAnalysis:
     """Analysis results for a pull request."""
@@ -39,6 +52,7 @@ class PRAnalysis:
     failed_check_names: list[str] = field(default_factory=list)
     pending_check_names: list[str] = field(default_factory=list)
     unresolved_comment_urls: list[str] = field(default_factory=list)
+    review_labels: list[ReviewLabel] = field(default_factory=list)
 
     @property
     def is_mergeable(self) -> bool:
@@ -69,6 +83,24 @@ def analyze_pr(
     url = pr_data["html_url"]
 
     analysis = PRAnalysis(repo=repo_full_name, pr_number=pr_number, title=title, url=url)
+
+    # Parse review-related labels from PR data
+    label_prefixes = {
+        "lgtm-": "lgtm",
+        "approved-": "approved",
+        "changes-requested-": "changes-requested",
+        "change-requested-": "changes-requested",
+        "commented-": "commented",
+    }
+
+    for label in pr_data.get("labels", []):
+        label_name = label.get("name", "") if isinstance(label, dict) else str(label)
+        for prefix, status in label_prefixes.items():
+            if label_name.startswith(prefix):
+                username = label_name[len(prefix):]
+                if username and username not in BOT_USERNAMES and not username.endswith("[bot]"):
+                    analysis.review_labels.append(ReviewLabel(username=username, status=status))
+                break
 
     if review_threads is None:
         review_threads = []

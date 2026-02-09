@@ -3,7 +3,7 @@
 
 import pytest
 
-from gh_pr_analyzer.analyzer import MergeBlocker, PRAnalysis, analyze_pr
+from gh_pr_analyzer.analyzer import MergeBlocker, PRAnalysis, ReviewLabel, analyze_pr
 
 
 class TestMergeBlocker:
@@ -769,3 +769,129 @@ class TestAnalyzePRUnresolvedComments:
         unresolved_blockers = [b for b in analysis.blockers if b.type == "UNRESOLVED_COMMENTS"]
         assert len(unresolved_blockers) == 1
         assert "1 unresolved review comment(s)" in unresolved_blockers[0].description
+
+
+class TestAnalyzePRReviewLabels:
+    """Test analyze_pr review label parsing from PR labels."""
+
+    def test_no_labels(self, mock_pr_data):
+        """Test PR data with no labels field produces empty review_labels."""
+        # mock_pr_data has no "labels" key by default
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert analysis.review_labels == []
+
+    def test_empty_labels(self, mock_pr_data):
+        """Test PR data with empty labels list produces empty review_labels."""
+        mock_pr_data["labels"] = []
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert analysis.review_labels == []
+
+    def test_lgtm_label(self, mock_pr_data):
+        """Test lgtm-username label creates ReviewLabel with status lgtm."""
+        mock_pr_data["labels"] = [{"name": "lgtm-alice"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 1
+        assert analysis.review_labels[0].username == "alice"
+        assert analysis.review_labels[0].status == "lgtm"
+
+    def test_approved_label(self, mock_pr_data):
+        """Test approved-username label creates ReviewLabel with status approved."""
+        mock_pr_data["labels"] = [{"name": "approved-bob"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 1
+        assert analysis.review_labels[0].username == "bob"
+        assert analysis.review_labels[0].status == "approved"
+
+    def test_changes_requested_label(self, mock_pr_data):
+        """Test changes-requested-username label creates ReviewLabel with status changes-requested."""
+        mock_pr_data["labels"] = [{"name": "changes-requested-carol"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 1
+        assert analysis.review_labels[0].username == "carol"
+        assert analysis.review_labels[0].status == "changes-requested"
+
+    def test_change_requested_label(self, mock_pr_data):
+        """Test change-requested-username (no 's') also creates ReviewLabel with status changes-requested."""
+        mock_pr_data["labels"] = [{"name": "change-requested-dave"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 1
+        assert analysis.review_labels[0].username == "dave"
+        assert analysis.review_labels[0].status == "changes-requested"
+
+    def test_commented_label(self, mock_pr_data):
+        """Test commented-username label creates ReviewLabel with status commented."""
+        mock_pr_data["labels"] = [{"name": "commented-eve"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 1
+        assert analysis.review_labels[0].username == "eve"
+        assert analysis.review_labels[0].status == "commented"
+
+    def test_bot_filtered_coderabbitai(self, mock_pr_data):
+        """Test that lgtm-coderabbitai label is filtered out as a bot."""
+        mock_pr_data["labels"] = [{"name": "lgtm-coderabbitai"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert analysis.review_labels == []
+
+    def test_bot_filtered_qe_bot(self, mock_pr_data):
+        """Test that lgtm-openshift-virtualization-qe-bot label is filtered out as a bot."""
+        mock_pr_data["labels"] = [{"name": "lgtm-openshift-virtualization-qe-bot"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert analysis.review_labels == []
+
+    def test_bot_filtered_bracket_bot(self, mock_pr_data):
+        """Test that approved-somebot[bot] label is filtered out as a bot."""
+        mock_pr_data["labels"] = [{"name": "approved-somebot[bot]"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert analysis.review_labels == []
+
+    def test_multiple_review_labels(self, mock_pr_data):
+        """Test multiple review labels create corresponding ReviewLabels."""
+        mock_pr_data["labels"] = [
+            {"name": "lgtm-alice"},
+            {"name": "changes-requested-bob"},
+            {"name": "approved-charlie"},
+        ]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 3
+        usernames = {rl.username for rl in analysis.review_labels}
+        statuses = {rl.status for rl in analysis.review_labels}
+        assert usernames == {"alice", "bob", "charlie"}
+        assert statuses == {"lgtm", "changes-requested", "approved"}
+
+    def test_non_review_labels_ignored(self, mock_pr_data):
+        """Test that non-review labels do not create ReviewLabels."""
+        mock_pr_data["labels"] = [
+            {"name": "size/XS"},
+            {"name": "needs-rebase"},
+            {"name": "branch-main"},
+            {"name": "sig-network"},
+        ]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert analysis.review_labels == []
+
+    def test_mixed_review_and_non_review_labels(self, mock_pr_data):
+        """Test that only review labels are extracted from a mix of labels."""
+        mock_pr_data["labels"] = [
+            {"name": "size/XS"},
+            {"name": "lgtm-alice"},
+            {"name": "needs-rebase"},
+            {"name": "approved-bob"},
+            {"name": "sig-network"},
+        ]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 2
+        usernames = {rl.username for rl in analysis.review_labels}
+        assert usernames == {"alice", "bob"}

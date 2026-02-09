@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from gh_pr_analyzer.analyzer import PRAnalysis, analyze_pr
+from gh_pr_analyzer.analyzer import PRAnalysis, ReviewLabel, analyze_pr
 from gh_pr_analyzer.github_client import GitHubClient
 
 app = typer.Typer(help="Analyze GitHub PRs and show why they cannot be merged")
@@ -402,7 +402,28 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
             ci_cell = '<td><span class="status-badge status-unknown">⏳ Unknown</span></td>'
 
         # Reviews
-        if analysis.review_status == "approved":
+        if analysis.review_labels:
+            review_items = []
+            approved_users = [rl.username for rl in analysis.review_labels if rl.status == "approved"]
+            lgtm_users = [rl.username for rl in analysis.review_labels if rl.status == "lgtm"]
+            changes_users = [rl.username for rl in analysis.review_labels if rl.status == "changes-requested"]
+
+            if approved_users:
+                for user in approved_users:
+                    review_items.append(f'<div><span class="status-badge status-passing">✅ {escape(user)}</span></div>')
+            if lgtm_users:
+                for user in lgtm_users:
+                    review_items.append(f'<div><span class="status-badge status-passing">👍 {escape(user)}</span></div>')
+            if changes_users:
+                for user in changes_users:
+                    review_items.append(f'<div><span class="status-badge status-failing">❌ {escape(user)}</span></div>')
+            commented_users = [rl.username for rl in analysis.review_labels if rl.status == "commented"]
+            if commented_users:
+                for user in commented_users:
+                    review_items.append(f'<div><span class="status-badge status-pending">💬 {escape(user)}</span></div>')
+
+            review_cell = f'<td>{"".join(review_items)}</td>'
+        elif analysis.review_status == "approved":
             review_cell = '<td><span class="status-badge status-passing">✅ Approved</span></td>'
         elif analysis.review_status == "changes_requested":
             review_cell = '<td><span class="status-badge status-failing">❌ Changes requested</span></td>'
@@ -611,6 +632,32 @@ def display_results(analyses: list) -> None:
             review_text = Text("➖ None", style="dim")
         else:
             review_text = Text("⏳ Unknown", style="dim")
+
+        # Append label-based reviews if present
+        if analysis.review_labels:
+            if analysis.review_status not in ("none", "unknown"):
+                review_text.append("\n")
+            else:
+                review_text = Text()
+
+            # Group by status for cleaner display
+            lgtm_users = [rl.username for rl in analysis.review_labels if rl.status == "lgtm"]
+            approved_users = [rl.username for rl in analysis.review_labels if rl.status == "approved"]
+            changes_users = [rl.username for rl in analysis.review_labels if rl.status == "changes-requested"]
+
+            if approved_users:
+                for user in approved_users:
+                    review_text.append(f"✅ {user}\n", style="green")
+            if lgtm_users:
+                for user in lgtm_users:
+                    review_text.append(f"👍 {user}\n", style="green")
+            if changes_users:
+                for user in changes_users:
+                    review_text.append(f"❌ {user}\n", style="red")
+            commented_users = [rl.username for rl in analysis.review_labels if rl.status == "commented"]
+            if commented_users:
+                for user in commented_users:
+                    review_text.append(f"💬 {user}\n", style="yellow")
 
         # Format Comments
         if analysis.comments_status == "resolved":
