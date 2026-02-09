@@ -749,10 +749,17 @@ def repo(
     repository: str = typer.Option(
         ..., "--repo", help="Repository in 'owner/repo' format (e.g., RedHatQE/openshift-virtualization-tests)"
     ),
-    pr_numbers: list[int] = typer.Option(..., "--prs", help="One or more PR numbers to analyze"),
+    prs: str = typer.Option(..., "--prs", help="Comma-separated PR numbers (e.g., 3704,3705 or just 3704)"),
     html: Optional[str] = typer.Option(None, "--html", help="Export results to HTML file"),
 ) -> None:
     """Analyze specific PRs from a GitHub repository."""
+    # Parse comma-separated PR numbers
+    try:
+        pr_numbers = [int(n.strip()) for n in prs.split(",") if n.strip()]
+    except ValueError:
+        console.print(f"[bold red]Error:[/bold red] Invalid PR numbers '{prs}'. Use comma-separated integers (e.g., 3704,3705).")
+        raise typer.Exit(1)
+
     if not pr_numbers:
         console.print("[bold red]Error:[/bold red] At least one PR number is required.")
         raise typer.Exit(1)
