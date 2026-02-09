@@ -57,15 +57,16 @@ def parse_repo_from_url(url: str) -> tuple[str, str]:
     return path_parts[0], path_parts[1]
 
 
-def export_to_html(analyses: list[PRAnalysis], filename: str, username: str, is_authenticated: bool = True) -> None:
+def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_authenticated: bool = True) -> None:
     """Export analysis results to an HTML file.
 
     Args:
         analyses: List of PRAnalysis objects
         filename: Output HTML filename
-        username: GitHub username being analyzed
+        label: Label for the report header (e.g., username or repository name)
         is_authenticated: Whether the client was authenticated when fetching data
     """
+    safe_label = escape(label)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Count summary statistics
@@ -78,7 +79,7 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str, is_
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PR Analysis - {username}</title>
+    <title>PR Analysis - {safe_label}</title>
     <style>
         * {{
             margin: 0;
@@ -318,7 +319,7 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, username: str, is_
         <header>
             <h1>🔍 PR Merge Blocker Analysis</h1>
             <div class="metadata">
-                <span>👤 User: <strong>{username}</strong></span>
+                <span>👤 {safe_label}</span>
                 <span>📅 Generated: <strong>{timestamp}</strong></span>
             </div>
         </header>
@@ -535,11 +536,13 @@ async def analyze_user_prs(username: str | None = None, html_output: str | None 
 
         # Export to HTML if requested
         if html_output:
-            export_to_html(analyses, html_output, username, client.is_authenticated)
+            export_to_html(analyses, html_output, label=username, is_authenticated=client.is_authenticated)
 
     except ValueError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         console.print(f"[bold red]Unexpected error:[/bold red] {e}")
         raise typer.Exit(1)
@@ -651,8 +654,77 @@ def display_results(analyses: list) -> None:
     console.print(f"  [blue]Total:[/blue] {len(analyses)}\n")
 
 
+async def analyze_repo_prs(repo_full_name: str, pr_numbers: list[int], html_output: str | None = None) -> None:
+    """Analyze specific PRs from a repository.
+
+    Args:
+        repo_full_name: Repository in 'owner/repo' format
+        pr_numbers: List of PR numbers to analyze
+        html_output: Optional HTML filename for exporting results
+    """
+    try:
+        client = GitHubClient()
+
+        # Parse owner/repo
+        parts = repo_full_name.split("/")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            console.print(
+                f"[bold red]Error:[/bold red] Invalid repository format '{repo_full_name}'. "
+                "Use 'owner/repo' format."
+            )
+            raise typer.Exit(1)
+        owner, repo = parts
+
+        # Warn if unauthenticated
+        if not client.is_authenticated:
+            console.print("[yellow]⚠️  No GITHUB_TOKEN set. Only public repository data will be collected.[/yellow]")
+            console.print("[dim]   Tip: Set GITHUB_TOKEN for higher rate limits and private repo access.[/dim]\n")
+
+        console.print(f"\n[bold green]Analyzing {len(pr_numbers)} PR(s) from {repo_full_name}[/bold green]\n")
+
+        # Analyze each PR
+        analyses = []
+        for pr_number in pr_numbers:
+            with console.status(f"[bold blue]Analyzing {repo_full_name}#{pr_number}..."):
+                try:
+                    pr_details = await client.get_pr_details(owner, repo, pr_number)
+                    reviews = await client.get_pr_reviews(owner, repo, pr_number)
+                    review_threads = (
+                        await client.get_pr_review_threads(owner, repo, pr_number)
+                        if client.is_authenticated
+                        else None
+                    )
+                    head_sha = pr_details["head"]["sha"]
+                    check_runs = await client.get_check_runs(owner, repo, head_sha)
+
+                    analysis = analyze_pr(pr_details, reviews, check_runs, review_threads)
+                    analyses.append(analysis)
+                except Exception as e:
+                    console.print(f"[bold red]Error analyzing PR #{pr_number}:[/bold red] {e}")
+
+        if not analyses:
+            console.print("[yellow]No PRs could be analyzed.[/yellow]")
+            return
+
+        # Display results
+        display_results(analyses)
+
+        # Export to HTML if requested
+        if html_output:
+            export_to_html(analyses, html_output, label=repo_full_name, is_authenticated=client.is_authenticated)
+
+    except ValueError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
 @app.command()
-def main(
+def user(
     username: Optional[str] = typer.Argument(None, help="GitHub username (defaults to authenticated user)"),
     html: Optional[str] = typer.Option(None, "--html", help="Export results to HTML file"),
 ) -> None:
@@ -661,7 +733,7 @@ def main(
     if not username and not os.getenv("GITHUB_TOKEN"):
         console.print("[bold red]Error:[/bold red] Username is required when GITHUB_TOKEN is not set.\n")
         console.print("[bold]Either:[/bold]")
-        console.print("  1. Provide a username: [cyan]gh-pr-analyzer <username>[/cyan]")
+        console.print("  1. Provide a username: [cyan]gh-pr-analyzer user <username>[/cyan]")
         console.print("  2. Set GITHUB_TOKEN with a Personal Access Token (PAT) for:")
         console.print("     • Higher rate limits (5000/hour vs 60/hour)")
         console.print("     • Access to private repositories")
@@ -670,6 +742,22 @@ def main(
         raise typer.Exit(1)
 
     asyncio.run(analyze_user_prs(username, html_output=html))
+
+
+@app.command()
+def repo(
+    repository: str = typer.Argument(
+        help="Repository in 'owner/repo' format (e.g., RedHatQE/openshift-virtualization-tests)"
+    ),
+    pr_numbers: list[int] = typer.Argument(help="One or more PR numbers to analyze"),
+    html: Optional[str] = typer.Option(None, "--html", help="Export results to HTML file"),
+) -> None:
+    """Analyze specific PRs from a GitHub repository."""
+    if not pr_numbers:
+        console.print("[bold red]Error:[/bold red] At least one PR number is required.")
+        raise typer.Exit(1)
+
+    asyncio.run(analyze_repo_prs(repository, pr_numbers, html_output=html))
 
 
 if __name__ == "__main__":

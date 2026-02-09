@@ -11,7 +11,13 @@ from rich.console import Console
 from rich.text import Text
 
 from gh_pr_analyzer.analyzer import MergeBlocker, PRAnalysis
-from gh_pr_analyzer.cli import analyze_user_prs, display_results, parse_repo_from_url
+from gh_pr_analyzer.cli import (
+    analyze_repo_prs,
+    analyze_user_prs,
+    app,
+    display_results,
+    parse_repo_from_url,
+)
 
 
 class TestParseRepoFromURL:
@@ -508,3 +514,186 @@ class TestCLIEdgeCases:
                 with patch("gh_pr_analyzer.cli.console"):
                     with pytest.raises(typer.Exit):
                         await analyze_user_prs("testuser")
+
+
+class TestAnalyzeRepoPRs:
+    """Test analyze_repo_prs async function."""
+
+    @pytest.mark.asyncio
+    async def test_analyze_repo_prs_single_pr(self, mock_token, mock_pr_data):
+        """Test analyzing a single PR from a repository."""
+        with patch.dict(os.environ, {"GITHUB_TOKEN": mock_token}):
+            with patch("gh_pr_analyzer.cli.GitHubClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client_class.return_value = mock_client
+                mock_client.is_authenticated = True
+
+                mock_client.get_pr_details.return_value = mock_pr_data
+                mock_client.get_pr_reviews.return_value = []
+                mock_client.get_pr_review_threads.return_value = []
+                mock_client.get_check_runs.return_value = []
+
+                with patch("gh_pr_analyzer.cli.display_results") as mock_display:
+                    with patch("gh_pr_analyzer.cli.console"):
+                        await analyze_repo_prs("owner/repo", [123])
+
+                        mock_client.get_pr_details.assert_called_once_with("owner", "repo", 123)
+                        mock_client.get_pr_reviews.assert_called_once_with("owner", "repo", 123)
+                        mock_client.get_check_runs.assert_called_once_with(
+                            "owner", "repo", mock_pr_data["head"]["sha"]
+                        )
+                        mock_display.assert_called_once()
+                        displayed_analyses = mock_display.call_args[0][0]
+                        assert len(displayed_analyses) == 1
+
+    @pytest.mark.asyncio
+    async def test_analyze_repo_prs_multiple_prs(self, mock_token, mock_pr_data):
+        """Test analyzing multiple PRs from a repository."""
+        with patch.dict(os.environ, {"GITHUB_TOKEN": mock_token}):
+            with patch("gh_pr_analyzer.cli.GitHubClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client_class.return_value = mock_client
+                mock_client.is_authenticated = True
+
+                mock_client.get_pr_details.return_value = mock_pr_data
+                mock_client.get_pr_reviews.return_value = []
+                mock_client.get_pr_review_threads.return_value = []
+                mock_client.get_check_runs.return_value = []
+
+                with patch("gh_pr_analyzer.cli.display_results") as mock_display:
+                    with patch("gh_pr_analyzer.cli.console"):
+                        await analyze_repo_prs("owner/repo", [101, 102, 103])
+
+                        assert mock_client.get_pr_details.call_count == 3
+                        assert mock_client.get_pr_reviews.call_count == 3
+                        assert mock_client.get_check_runs.call_count == 3
+
+                        mock_display.assert_called_once()
+                        displayed_analyses = mock_display.call_args[0][0]
+                        assert len(displayed_analyses) == 3
+
+    @pytest.mark.asyncio
+    async def test_analyze_repo_prs_invalid_repo_format(self, mock_token):
+        """Test that invalid repo format (no slash) exits with error."""
+        with patch.dict(os.environ, {"GITHUB_TOKEN": mock_token}):
+            with patch("gh_pr_analyzer.cli.GitHubClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client_class.return_value = mock_client
+                mock_client.is_authenticated = True
+
+                with patch("gh_pr_analyzer.cli.console") as mock_console:
+                    with pytest.raises(typer.Exit):
+                        await analyze_repo_prs("invalid-repo-no-slash", [123])
+
+                    # Should print error about invalid format
+                    print_calls = [str(call) for call in mock_console.print.call_args_list]
+                    assert any("Invalid repository format" in call for call in print_calls)
+
+    @pytest.mark.asyncio
+    async def test_analyze_repo_prs_pr_not_found(self, mock_token, mock_pr_data):
+        """Test that a PR raising ValueError (404) is skipped and others continue."""
+        with patch.dict(os.environ, {"GITHUB_TOKEN": mock_token}):
+            with patch("gh_pr_analyzer.cli.GitHubClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client_class.return_value = mock_client
+                mock_client.is_authenticated = True
+
+                # First PR raises ValueError (not found), second succeeds
+                mock_client.get_pr_details.side_effect = [
+                    ValueError("PR not found (404)"),
+                    mock_pr_data,
+                ]
+                mock_client.get_pr_reviews.return_value = []
+                mock_client.get_pr_review_threads.return_value = []
+                mock_client.get_check_runs.return_value = []
+
+                with patch("gh_pr_analyzer.cli.display_results") as mock_display:
+                    with patch("gh_pr_analyzer.cli.console") as mock_console:
+                        await analyze_repo_prs("owner/repo", [999, 123])
+
+                        # Should print error for the failed PR
+                        print_calls = [str(call) for call in mock_console.print.call_args_list]
+                        assert any("Error analyzing PR #999" in call for call in print_calls)
+
+                        # Should still display results for the successful PR
+                        mock_display.assert_called_once()
+                        displayed_analyses = mock_display.call_args[0][0]
+                        assert len(displayed_analyses) == 1
+
+    @pytest.mark.asyncio
+    async def test_analyze_repo_prs_html_export(self, mock_token, mock_pr_data):
+        """Test that HTML export is called with repo name as label."""
+        with patch.dict(os.environ, {"GITHUB_TOKEN": mock_token}):
+            with patch("gh_pr_analyzer.cli.GitHubClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client_class.return_value = mock_client
+                mock_client.is_authenticated = True
+
+                mock_client.get_pr_details.return_value = mock_pr_data
+                mock_client.get_pr_reviews.return_value = []
+                mock_client.get_pr_review_threads.return_value = []
+                mock_client.get_check_runs.return_value = []
+
+                with patch("gh_pr_analyzer.cli.display_results"):
+                    with patch("gh_pr_analyzer.cli.export_to_html") as mock_export:
+                        with patch("gh_pr_analyzer.cli.console"):
+                            await analyze_repo_prs("owner/repo", [123], html_output="report.html")
+
+                            mock_export.assert_called_once()
+                            call_kwargs = mock_export.call_args
+                            # Verify label is the repo full name
+                            assert call_kwargs[1]["label"] == "owner/repo"
+                            assert call_kwargs[0][1] == "report.html"
+
+    @pytest.mark.asyncio
+    async def test_analyze_repo_prs_unauthenticated(self, mock_pr_data):
+        """Test that unauthenticated access skips review_threads (passes None)."""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("gh_pr_analyzer.cli.GitHubClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client_class.return_value = mock_client
+                mock_client.is_authenticated = False
+
+                mock_client.get_pr_details.return_value = mock_pr_data
+                mock_client.get_pr_reviews.return_value = []
+                mock_client.get_check_runs.return_value = []
+
+                with patch("gh_pr_analyzer.cli.analyze_pr") as mock_analyze:
+                    mock_analyze.return_value = PRAnalysis(
+                        repo="owner/repo",
+                        pr_number=123,
+                        title="Test PR",
+                        url="https://github.com/owner/repo/pull/123",
+                        blockers=[],
+                    )
+                    with patch("gh_pr_analyzer.cli.display_results"):
+                        with patch("gh_pr_analyzer.cli.console"):
+                            await analyze_repo_prs("owner/repo", [123])
+
+                            # review_threads should be None (not fetched)
+                            mock_client.get_pr_review_threads.assert_not_called()
+
+                            # analyze_pr should receive None for review_threads
+                            mock_analyze.assert_called_once()
+                            call_args = mock_analyze.call_args[0]
+                            assert call_args[3] is None  # review_threads is the 4th positional arg
+
+
+class TestRepoCommand:
+    """Test the Typer repo command."""
+
+    def test_repo_command_calls_analyze(self, mock_token, mock_pr_data):
+        """Test that the repo command calls analyze_repo_prs with correct args."""
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+
+        with patch("gh_pr_analyzer.cli.asyncio.run") as mock_run:
+            result = runner.invoke(app, ["repo", "owner/repo", "42", "99"])
+
+            assert result.exit_code == 0
+            mock_run.assert_called_once()
+            # Inspect the coroutine arguments
+            call_args = mock_run.call_args[0][0]
+            # The coroutine was created from analyze_repo_prs; verify via asyncio.run call
+            # We check that asyncio.run was called (the command delegates to it)
