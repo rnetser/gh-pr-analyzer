@@ -960,3 +960,34 @@ class TestAnalyzePRState:
         mock_pr_data["draft"] = True
         analysis = analyze_pr(mock_pr_data, [], [])
         assert analysis.state == "merged"
+
+    def test_merged_pr_has_no_blockers(self, mock_pr_data):
+        """Test merged PR skips blocker detection."""
+        mock_pr_data["merged"] = True
+        mock_pr_data["mergeable"] = False  # Would normally create conflict blocker
+        mock_pr_data["mergeable_state"] = "dirty"
+        check_runs = [{"id": 1, "name": "CI", "status": "completed", "conclusion": "failure", "output": {}}]
+        analysis = analyze_pr(mock_pr_data, [], check_runs)
+        assert analysis.state == "merged"
+        assert len(analysis.blockers) == 0
+        assert analysis.is_mergeable is True
+        assert analysis.ci_status == "n/a"
+        assert analysis.conflicts_status == "n/a"
+
+    def test_closed_pr_has_no_blockers(self, mock_pr_data):
+        """Test closed PR skips blocker detection."""
+        mock_pr_data["state"] = "closed"
+        mock_pr_data["mergeable"] = False
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "closed"
+        assert len(analysis.blockers) == 0
+        assert analysis.ci_status == "n/a"
+
+    def test_merged_pr_keeps_review_labels(self, mock_pr_data):
+        """Test merged PR still parses review labels."""
+        mock_pr_data["merged"] = True
+        mock_pr_data["labels"] = [{"name": "lgtm-alice"}, {"name": "approved-bob"}]
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "merged"
+        assert len(analysis.review_labels) == 2
+        assert len(analysis.blockers) == 0

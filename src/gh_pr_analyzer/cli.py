@@ -70,8 +70,9 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Count summary statistics
-    mergeable_count = sum(1 for a in analyses if a.is_mergeable)
-    blocked_count = len(analyses) - mergeable_count
+    merged_count = sum(1 for a in analyses if a.state in ("merged", "closed"))
+    mergeable_count = sum(1 for a in analyses if a.is_mergeable and a.state not in ("merged", "closed"))
+    blocked_count = len(analyses) - mergeable_count - merged_count
 
     # Build HTML content
     html_content = f"""<!DOCTYPE html>
@@ -342,6 +343,10 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
                     <span class="stat-value blue">{len(analyses)}</span>
                 </div>
                 <div class="stat">
+                    <span class="stat-label">Merged/Closed:</span>
+                    <span class="stat-value" style="color:#7c3aed">{merged_count}</span>
+                </div>
+                <div class="stat">
                     <span class="stat-label">Ready to merge:</span>
                     <span class="stat-value green">{mergeable_count}</span>
                 </div>
@@ -392,7 +397,9 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
             state_cell = '<td><span class="status-badge status-passing">🟢 Open</span></td>'
 
         # CI Status
-        if analysis.ci_status == "passing":
+        if analysis.ci_status == "n/a":
+            ci_cell = '<td><span class="status-badge status-none">➖ N/A</span></td>'
+        elif analysis.ci_status == "passing":
             ci_cell = '<td><span class="status-badge status-passing">✅ Passing</span></td>'
         elif analysis.failed_check_names or analysis.pending_check_names:
             ci_content = []
@@ -439,7 +446,9 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
                 review_cell = f'<td>{"".join(review_items)}</td>'
 
         if review_cell is None:
-            if analysis.review_status == "approved":
+            if analysis.review_status == "n/a":
+                review_cell = '<td><span class="status-badge status-none">➖ N/A</span></td>'
+            elif analysis.review_status == "approved":
                 review_cell = '<td><span class="status-badge status-passing">✅ Approved</span></td>'
             elif analysis.review_status == "changes_requested":
                 review_cell = '<td><span class="status-badge status-failing">❌ Changes requested</span></td>'
@@ -451,7 +460,9 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
                 review_cell = '<td><span class="status-badge status-unknown">⏳ Unknown</span></td>'
 
         # Comments
-        if analysis.comments_status == "resolved":
+        if analysis.comments_status == "n/a":
+            comments_cell = '<td><span class="status-badge status-none">➖ N/A</span></td>'
+        elif analysis.comments_status == "resolved":
             comments_cell = '<td><span class="status-badge status-passing">✅ Resolved</span></td>'
         elif analysis.comments_status == "unresolved":
             comments_content = [f'<div><span class="status-badge status-failing">❌ {analysis.unresolved_comment_count} unresolved</span></div>']
@@ -466,7 +477,9 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
             comments_cell = '<td><span class="status-badge status-unknown">⏳ Unknown</span></td>'
 
         # Conflicts
-        if analysis.conflicts_status == "clean":
+        if analysis.conflicts_status == "n/a":
+            conflicts_cell = '<td><span class="status-badge status-none">➖ N/A</span></td>'
+        elif analysis.conflicts_status == "clean":
             conflicts_cell = '<td><span class="status-badge status-passing">✅ Clean</span></td>'
         elif analysis.conflicts_status == "conflicts":
             conflicts_cell = '<td><span class="status-badge status-failing">❌ Has conflicts</span></td>'
@@ -612,10 +625,13 @@ def display_results(analyses: list) -> None:
 
     mergeable_count = 0
     blocked_count = 0
+    merged_count = 0
 
     for analysis in analyses:
         # Track mergeable status
-        if analysis.is_mergeable:
+        if analysis.state in ("merged", "closed"):
+            merged_count += 1
+        elif analysis.is_mergeable:
             mergeable_count += 1
         else:
             blocked_count += 1
@@ -633,7 +649,9 @@ def display_results(analyses: list) -> None:
             state_text = Text("🟢 Open", style="bold green")
 
         # Format CI Status - show both failing and pending when applicable
-        if analysis.ci_status == "passing":
+        if analysis.ci_status == "n/a":
+            ci_text = Text("➖ N/A", style="dim")
+        elif analysis.ci_status == "passing":
             ci_text = Text("✅ Passing", style="bold green")
         elif analysis.failed_check_names or analysis.pending_check_names:
             # Build combined status showing both failing and pending
@@ -678,7 +696,9 @@ def display_results(analyses: list) -> None:
                         review_text.append(f"  ❌ {user}\n", style="red")
 
         if not review_labels_present:
-            if analysis.review_status == "approved":
+            if analysis.review_status == "n/a":
+                review_text = Text("➖ N/A", style="dim")
+            elif analysis.review_status == "approved":
                 review_text = Text("✅ Approved", style="bold green")
             elif analysis.review_status == "changes_requested":
                 review_text = Text("❌ Changes requested", style="bold red")
@@ -690,7 +710,9 @@ def display_results(analyses: list) -> None:
                 review_text = Text("⏳ Unknown", style="dim")
 
         # Format Comments
-        if analysis.comments_status == "resolved":
+        if analysis.comments_status == "n/a":
+            comments_text = Text("➖ N/A", style="dim")
+        elif analysis.comments_status == "resolved":
             comments_text = Text("✅ Resolved", style="bold green")
         elif analysis.comments_status == "unresolved":
             comments_text = Text(f"❌ {analysis.unresolved_comment_count} unresolved:\n", style="bold red")
@@ -705,7 +727,9 @@ def display_results(analyses: list) -> None:
             comments_text = Text("⏳ Unknown", style="dim")
 
         # Format Conflicts
-        if analysis.conflicts_status == "clean":
+        if analysis.conflicts_status == "n/a":
+            conflicts_text = Text("➖ N/A", style="dim")
+        elif analysis.conflicts_status == "clean":
             conflicts_text = Text("✅ Clean", style="bold green")
         elif analysis.conflicts_status == "conflicts":
             conflicts_text = Text("❌ Has conflicts", style="bold red")
@@ -727,6 +751,8 @@ def display_results(analyses: list) -> None:
 
     # Summary
     console.print(f"\n[bold]Summary:[/bold]")
+    if merged_count:
+        console.print(f"  [magenta]Merged/Closed:[/magenta] {merged_count}")
     console.print(f"  [green]Ready to merge:[/green] {mergeable_count}")
     console.print(f"  [red]Blocked:[/red] {blocked_count}")
     console.print(f"  [blue]Total:[/blue] {len(analyses)}\n")

@@ -116,6 +116,14 @@ def analyze_pr(
                     analysis.review_labels.append(ReviewLabel(username=username, status=status))
                 break
 
+    # Skip blocker detection for merged/closed PRs
+    if state in ("merged", "closed"):
+        analysis.ci_status = "n/a"
+        analysis.review_status = "n/a"
+        analysis.comments_status = "n/a"
+        analysis.conflicts_status = "n/a"
+        return analysis
+
     if review_threads is None:
         review_threads = []
 
