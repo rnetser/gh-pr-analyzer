@@ -746,10 +746,10 @@ def user(
 
 @app.command()
 def repo(
-    repository: str = typer.Argument(
-        help="Repository in 'owner/repo' format (e.g., RedHatQE/openshift-virtualization-tests)"
+    repository: str = typer.Option(
+        ..., "--repo", help="Repository in 'owner/repo' format (e.g., RedHatQE/openshift-virtualization-tests)"
     ),
-    pr_numbers: list[int] = typer.Argument(help="One or more PR numbers to analyze"),
+    pr_numbers: list[int] = typer.Option(..., "--prs", help="One or more PR numbers to analyze"),
     html: Optional[str] = typer.Option(None, "--html", help="Export results to HTML file"),
 ) -> None:
     """Analyze specific PRs from a GitHub repository."""

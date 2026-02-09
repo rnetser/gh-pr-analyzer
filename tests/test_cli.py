@@ -689,7 +689,7 @@ class TestRepoCommand:
         runner = CliRunner()
 
         with patch("gh_pr_analyzer.cli.asyncio.run") as mock_run:
-            result = runner.invoke(app, ["repo", "owner/repo", "42", "99"])
+            result = runner.invoke(app, ["repo", "--repo", "owner/repo", "--prs", "42", "--prs", "99"])
 
             assert result.exit_code == 0
             mock_run.assert_called_once()
