@@ -41,6 +41,7 @@ class PRAnalysis:
     pr_number: int
     title: str
     url: str
+    state: str = "open"  # open, merged, closed, draft
     blockers: list[MergeBlocker] = field(default_factory=list)
     ci_status: str = "unknown"  # passing, failing, pending, unknown
     review_status: str = "unknown"  # approved, changes_requested, pending, none
@@ -82,7 +83,21 @@ def analyze_pr(
     title = pr_data["title"]
     url = pr_data["html_url"]
 
-    analysis = PRAnalysis(repo=repo_full_name, pr_number=pr_number, title=title, url=url)
+    # Determine PR state
+    state = "open"
+    if pr_data.get("merged"):
+        state = "merged"
+    elif pr_data.get("state") == "closed":
+        state = "closed"
+    elif pr_data.get("draft"):
+        state = "draft"
+
+    # Check for WIP in title
+    title_lower = title.lower()
+    if title_lower.startswith("wip:") or title_lower.startswith("[wip]") or title_lower.startswith("wip "):
+        state = "wip"
+
+    analysis = PRAnalysis(repo=repo_full_name, pr_number=pr_number, title=title, url=url, state=state)
 
     # Parse review-related labels from PR data
     label_prefixes = {
@@ -100,14 +115,6 @@ def analyze_pr(
                 if username and username not in BOT_USERNAMES and not username.endswith("[bot]"):
                     analysis.review_labels.append(ReviewLabel(username=username, status=status))
                 break
-
-    # Deduplicate: if a user has 'approved', remove their 'lgtm' entry
-    if analysis.review_labels:
-        approved_usernames = {rl.username for rl in analysis.review_labels if rl.status == "approved"}
-        analysis.review_labels = [
-            rl for rl in analysis.review_labels
-            if not (rl.status == "lgtm" and rl.username in approved_usernames)
-        ]
 
     if review_threads is None:
         review_threads = []

@@ -894,3 +894,69 @@ class TestAnalyzePRReviewLabels:
         assert len(analysis.review_labels) == 2
         usernames = {rl.username for rl in analysis.review_labels}
         assert usernames == {"alice", "bob"}
+
+    def test_duplicate_user_approved_and_lgtm(self, mock_pr_data):
+        """Test that a user can appear under both approved and lgtm (no deduplication)."""
+        mock_pr_data["labels"] = [
+            {"name": "approved-alice"},
+            {"name": "lgtm-alice"},
+        ]
+        analysis = analyze_pr(mock_pr_data, [], [])
+
+        assert len(analysis.review_labels) == 2
+        statuses = [rl.status for rl in analysis.review_labels]
+        assert "approved" in statuses
+        assert "lgtm" in statuses
+        assert all(rl.username == "alice" for rl in analysis.review_labels)
+
+
+class TestAnalyzePRState:
+    """Test PR state detection."""
+
+    def test_state_open(self, mock_pr_data):
+        """Test default state is open."""
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "open"
+
+    def test_state_merged(self, mock_pr_data):
+        """Test merged PR state."""
+        mock_pr_data["merged"] = True
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "merged"
+
+    def test_state_closed(self, mock_pr_data):
+        """Test closed PR state."""
+        mock_pr_data["state"] = "closed"
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "closed"
+
+    def test_state_draft(self, mock_pr_data):
+        """Test draft PR state."""
+        mock_pr_data["draft"] = True
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "draft"
+
+    def test_state_wip_colon_prefix(self, mock_pr_data):
+        """Test WIP detection from title with colon prefix."""
+        mock_pr_data["title"] = "WIP: work in progress"
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "wip"
+
+    def test_state_wip_bracket_prefix(self, mock_pr_data):
+        """Test WIP detection from title with bracket prefix."""
+        mock_pr_data["title"] = "[WIP] some feature"
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "wip"
+
+    def test_state_wip_space_prefix(self, mock_pr_data):
+        """Test WIP detection from title with space prefix."""
+        mock_pr_data["title"] = "wip some changes"
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "wip"
+
+    def test_state_merged_takes_priority(self, mock_pr_data):
+        """Test merged state takes priority over draft."""
+        mock_pr_data["merged"] = True
+        mock_pr_data["draft"] = True
+        analysis = analyze_pr(mock_pr_data, [], [])
+        assert analysis.state == "merged"

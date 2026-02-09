@@ -358,6 +358,7 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
                     <th>Repository</th>
                     <th>PR #</th>
                     <th>Title</th>
+                    <th>State</th>
                     <th>CI Status</th>
                     <th>Reviews</th>
                     <th>Comments</th>
@@ -377,6 +378,18 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
 
         # PR title (linked)
         title_cell = f'<td><a href="{escape(analysis.url)}" class="pr-title" target="_blank">{escape(analysis.title[:80])}</a></td>'
+
+        # State
+        if analysis.state == "merged":
+            state_cell = '<td><span class="status-badge" style="background:#d4c5f9;color:#5b21b6">🟣 Merged</span></td>'
+        elif analysis.state == "closed":
+            state_cell = '<td><span class="status-badge status-failing">🔴 Closed</span></td>'
+        elif analysis.state == "draft":
+            state_cell = '<td><span class="status-badge status-none">📝 Draft</span></td>'
+        elif analysis.state == "wip":
+            state_cell = '<td><span class="status-badge status-pending">🚧 WIP</span></td>'
+        else:
+            state_cell = '<td><span class="status-badge status-passing">🟢 Open</span></td>'
 
         # CI Status
         if analysis.ci_status == "passing":
@@ -407,9 +420,6 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
             approved_users = [rl.username for rl in analysis.review_labels if rl.status == "approved"]
             lgtm_users = [rl.username for rl in analysis.review_labels if rl.status == "lgtm"]
             changes_users = [rl.username for rl in analysis.review_labels if rl.status == "changes-requested"]
-
-            # Deduplicate: approved supersedes lgtm
-            lgtm_users = [u for u in lgtm_users if u not in approved_users]
 
             review_items = []
             if approved_users:
@@ -469,6 +479,7 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
                     {repo_cell}
                     {pr_number_cell}
                     {title_cell}
+                    {state_cell}
                     {ci_cell}
                     {review_cell}
                     {comments_cell}
@@ -591,6 +602,7 @@ def display_results(analyses: list) -> None:
     table.add_column("Repository", style="cyan", no_wrap=True)
     table.add_column("PR #", style="blue")
     table.add_column("Title", style="white")
+    table.add_column("State", style="white", justify="center")
     table.add_column("CI Status", style="white", justify="center")
     table.add_column("Reviews", style="white", justify="center")
     table.add_column("Comments", style="white", justify="center")
@@ -605,6 +617,18 @@ def display_results(analyses: list) -> None:
             mergeable_count += 1
         else:
             blocked_count += 1
+
+        # Format State
+        if analysis.state == "merged":
+            state_text = Text("🟣 Merged", style="bold magenta")
+        elif analysis.state == "closed":
+            state_text = Text("🔴 Closed", style="bold red")
+        elif analysis.state == "draft":
+            state_text = Text("📝 Draft", style="bold dim")
+        elif analysis.state == "wip":
+            state_text = Text("🚧 WIP", style="bold yellow")
+        else:
+            state_text = Text("🟢 Open", style="bold green")
 
         # Format CI Status - show both failing and pending when applicable
         if analysis.ci_status == "passing":
@@ -633,9 +657,6 @@ def display_results(analyses: list) -> None:
             approved_users = [rl.username for rl in analysis.review_labels if rl.status == "approved"]
             lgtm_users = [rl.username for rl in analysis.review_labels if rl.status == "lgtm"]
             changes_users = [rl.username for rl in analysis.review_labels if rl.status == "changes-requested"]
-
-            # Deduplicate: approved supersedes lgtm
-            lgtm_users = [u for u in lgtm_users if u not in approved_users]
 
             if approved_users or lgtm_users or changes_users:
                 review_labels_present = True
@@ -693,6 +714,7 @@ def display_results(analyses: list) -> None:
             analysis.repo,
             str(analysis.pr_number),
             analysis.title[:50],
+            state_text,
             ci_text,
             review_text,
             comments_text,
