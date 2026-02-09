@@ -824,14 +824,12 @@ class TestAnalyzePRReviewLabels:
         assert analysis.review_labels[0].username == "dave"
         assert analysis.review_labels[0].status == "changes-requested"
 
-    def test_commented_label(self, mock_pr_data):
-        """Test commented-username label creates ReviewLabel with status commented."""
+    def test_commented_label_ignored(self, mock_pr_data):
+        """Test commented-username label is no longer parsed and is ignored."""
         mock_pr_data["labels"] = [{"name": "commented-eve"}]
         analysis = analyze_pr(mock_pr_data, [], [])
 
-        assert len(analysis.review_labels) == 1
-        assert analysis.review_labels[0].username == "eve"
-        assert analysis.review_labels[0].status == "commented"
+        assert analysis.review_labels == []
 
     def test_bot_filtered_coderabbitai(self, mock_pr_data):
         """Test that lgtm-coderabbitai label is filtered out as a bot."""
@@ -876,6 +874,7 @@ class TestAnalyzePRReviewLabels:
             {"name": "needs-rebase"},
             {"name": "branch-main"},
             {"name": "sig-network"},
+            {"name": "commented-username"},
         ]
         analysis = analyze_pr(mock_pr_data, [], [])
 

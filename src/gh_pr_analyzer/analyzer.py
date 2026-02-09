@@ -90,7 +90,6 @@ def analyze_pr(
         "approved-": "approved",
         "changes-requested-": "changes-requested",
         "change-requested-": "changes-requested",
-        "commented-": "commented",
     }
 
     for label in pr_data.get("labels", []):
