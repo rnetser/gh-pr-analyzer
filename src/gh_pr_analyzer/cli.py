@@ -596,17 +596,19 @@ def display_results(analyses: list) -> None:
         title="PR Analysis Results",
         show_header=True,
         header_style="bold magenta",
-        show_lines=True,  # Add horizontal separators between rows
+        show_lines=True,
+        expand=True,
+        padding=(0, 1),
     )
 
-    table.add_column("Repository", style="cyan", no_wrap=True)
-    table.add_column("PR #", style="blue")
-    table.add_column("Title", style="white")
-    table.add_column("State", style="white", justify="center")
-    table.add_column("CI Status", style="white", justify="center")
-    table.add_column("Reviews", style="white", justify="center")
-    table.add_column("Comments", style="white", justify="center")
-    table.add_column("Conflicts", style="white", justify="center")
+    table.add_column("Repository", style="cyan", no_wrap=True, max_width=40)
+    table.add_column("PR #", style="blue", no_wrap=True, justify="right", width=6)
+    table.add_column("Title", style="white", ratio=2, min_width=20, max_width=50)
+    table.add_column("State", style="white", justify="center", no_wrap=True, width=10)
+    table.add_column("CI Status", style="white", justify="left", min_width=12)
+    table.add_column("Reviews", style="white", justify="left", min_width=15)
+    table.add_column("Comments", style="white", justify="center", no_wrap=True, min_width=12)
+    table.add_column("Conflicts", style="white", justify="center", no_wrap=True, width=14)
 
     mergeable_count = 0
     blocked_count = 0
