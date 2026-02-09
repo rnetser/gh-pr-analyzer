@@ -408,6 +408,9 @@ def export_to_html(analyses: list[PRAnalysis], filename: str, label: str, is_aut
             lgtm_users = [rl.username for rl in analysis.review_labels if rl.status == "lgtm"]
             changes_users = [rl.username for rl in analysis.review_labels if rl.status == "changes-requested"]
 
+            # Deduplicate: approved supersedes lgtm
+            lgtm_users = [u for u in lgtm_users if u not in approved_users]
+
             review_items = []
             if approved_users:
                 review_items.append('<div style="margin-bottom:4px"><strong>Approved:</strong></div>')
@@ -624,31 +627,19 @@ def display_results(analyses: list) -> None:
         else:
             ci_text = Text("⏳ Unknown", style="dim")
 
-        # Format Reviews
-        if analysis.review_status == "approved":
-            review_text = Text("✅ Approved", style="bold green")
-        elif analysis.review_status == "changes_requested":
-            review_text = Text("❌ Changes requested", style="bold red")
-        elif analysis.review_status == "pending":
-            review_text = Text("⏳ Pending", style="bold yellow")
-        elif analysis.review_status == "none":
-            review_text = Text("➖ None", style="dim")
-        else:
-            review_text = Text("⏳ Unknown", style="dim")
-
-        # Append label-based reviews if present
+        # Format Reviews - labels take priority over API review status
+        review_labels_present = False
         if analysis.review_labels:
-            # Only show lgtm, approved, changes-requested (not commented)
-            lgtm_users = [rl.username for rl in analysis.review_labels if rl.status == "lgtm"]
             approved_users = [rl.username for rl in analysis.review_labels if rl.status == "approved"]
+            lgtm_users = [rl.username for rl in analysis.review_labels if rl.status == "lgtm"]
             changes_users = [rl.username for rl in analysis.review_labels if rl.status == "changes-requested"]
 
-            has_review_labels = lgtm_users or approved_users or changes_users
-            if has_review_labels:
-                if analysis.review_status not in ("none", "unknown"):
-                    review_text.append("\n")
-                else:
-                    review_text = Text()
+            # Deduplicate: approved supersedes lgtm
+            lgtm_users = [u for u in lgtm_users if u not in approved_users]
+
+            if approved_users or lgtm_users or changes_users:
+                review_labels_present = True
+                review_text = Text()
 
                 if approved_users:
                     review_text.append("Approved:\n", style="bold green")
@@ -662,6 +653,18 @@ def display_results(analyses: list) -> None:
                     review_text.append("Changes requested:\n", style="bold red")
                     for user in changes_users:
                         review_text.append(f"  ❌ {user}\n", style="red")
+
+        if not review_labels_present:
+            if analysis.review_status == "approved":
+                review_text = Text("✅ Approved", style="bold green")
+            elif analysis.review_status == "changes_requested":
+                review_text = Text("❌ Changes requested", style="bold red")
+            elif analysis.review_status == "pending":
+                review_text = Text("⏳ Pending", style="bold yellow")
+            elif analysis.review_status == "none":
+                review_text = Text("➖ None", style="dim")
+            else:
+                review_text = Text("⏳ Unknown", style="dim")
 
         # Format Comments
         if analysis.comments_status == "resolved":

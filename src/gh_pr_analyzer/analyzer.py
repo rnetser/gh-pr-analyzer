@@ -101,6 +101,14 @@ def analyze_pr(
                     analysis.review_labels.append(ReviewLabel(username=username, status=status))
                 break
 
+    # Deduplicate: if a user has 'approved', remove their 'lgtm' entry
+    if analysis.review_labels:
+        approved_usernames = {rl.username for rl in analysis.review_labels if rl.status == "approved"}
+        analysis.review_labels = [
+            rl for rl in analysis.review_labels
+            if not (rl.status == "lgtm" and rl.username in approved_usernames)
+        ]
+
     if review_threads is None:
         review_threads = []
 
